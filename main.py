@@ -29,7 +29,7 @@ def main():
     env_p = multiprocessing.Process(
         target=run_env,
         args=(shared_env, env_to_display, display_to_env, energies_to_env, events_to_env, log_to_display),
-        daemon=True,
+        daemon=False,
     )
     env_p.start()
 
@@ -37,7 +37,7 @@ def main():
     disp_p = multiprocessing.Process(
         target=run_web_display,
         args=(env_to_display, display_to_env, log_to_display, "127.0.0.1", 8000),
-        daemon=True,
+        daemon=False,
     )
     disp_p.start()
 
