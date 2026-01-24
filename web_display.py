@@ -117,7 +117,7 @@ button.danger{border-color: rgba(239,68,68,0.7);}
 </head>
 <body>
   <h1>Circle of Life (Live)</h1>
-  <div class="small">Refresh 200 ms. Display talks to env via queue only.</div>
+  <div class="small">Simulation d'un écosystème. Veuillez ajouter des proies et des prédateurs.</div>
 
   <div class="grid">
     <div class="box">
