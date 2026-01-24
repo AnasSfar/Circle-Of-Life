@@ -13,7 +13,7 @@ MAX_PREDATORS = 80
 MAX_GRASS = 2000
 
 # Initial state
-INITIAL_GRASS = 200
+INITIAL_GRASS = 1000
 
 # Energy thresholds
 H_ENERGY = 30         # hungry/active threshold
