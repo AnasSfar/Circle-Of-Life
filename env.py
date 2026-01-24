@@ -146,7 +146,7 @@ def run_env(shared_env, env_to_display, display_to_env,
             prey_procs[p.pid] = p
             prey_ctrl[p.pid] = q
 
-        _log(log_to_display, f"🐇 +{n} prey ({origin})")
+        _log(log_to_display, f"🐇 +{n} prey")
 
     def spawn_predator(n: int, origin: str = "UI"):
         n = int(n)
@@ -170,7 +170,7 @@ def run_env(shared_env, env_to_display, display_to_env,
             pred_procs[p.pid] = p
             pred_ctrl[p.pid] = q
 
-        _log(log_to_display, f"🦁 +{n} predator ({origin})")
+        _log(log_to_display, f"🦁 +{n} predator")
 
     def kill_one_active_prey():
         # rule: only active preys can be predated
