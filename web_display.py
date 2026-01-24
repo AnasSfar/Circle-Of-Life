@@ -1,5 +1,5 @@
 # web_display.py
-# Live HTML dashboard + JSON API for the Circle of Life simulation (LOCAL)
+# Simple local HTML dashboard + JSON API for the Circle of Life simulation (LOCAL)
 #  - GET  /           -> HTML page
 #  - GET  /api/state  -> latest snapshot + logs as JSON
 #  - POST /api/cmd    -> send command to env via display_to_env queue
@@ -17,19 +17,12 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
     latest_lock = threading.Lock()
 
     def _extract_probs(obj, kind: str):
-        """
-        Returns dict with keys:
-          - prey:  {"eat": float, "repro": float}
-          - pred:  {"hunt": float, "repro": float}
-        Accepts tuple/list, dict, or missing.
-        """
         if kind == "prey":
             if isinstance(obj, (tuple, list)) and len(obj) >= 2:
                 return {"eat": float(obj[0]), "repro": float(obj[1])}
             if isinstance(obj, dict):
                 return {"eat": float(obj.get("eat", 0.0)), "repro": float(obj.get("repro", 0.0))}
             return {"eat": 0.0, "repro": 0.0}
-
         # predator
         if isinstance(obj, (tuple, list)) and len(obj) >= 2:
             return {"hunt": float(obj[0]), "repro": float(obj[1])}
@@ -81,7 +74,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
                 while True:
                     line = log_to_display.get_nowait()
                     with logs_lock:
-                        logs.insert(0, line)
+                        logs.insert(0, str(line))
                         if len(logs) > 200:
                             logs = logs[:200]
             except Exception:
@@ -97,338 +90,214 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Circle of Life (Local)</title>
   <style>
-    :root{
-      --bg1:#071a12;
-      --bg2:#0b2a1d;
-      --card: rgba(255,255,255,.08);
-      --cardBorder: rgba(255,255,255,.14);
-      --text:#ecfdf5;
-      --muted: rgba(236,253,245,.72);
-      --shadow: 0 12px 40px rgba(0,0,0,.35);
-    }
-
     body{
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      margin:0;
-      color: var(--text);
-      min-height:100vh;
-      background:
-        radial-gradient(1200px 700px at 20% 10%, rgba(52,211,153,.16), transparent 55%),
-        radial-gradient(1000px 600px at 90% 30%, rgba(34,197,94,.14), transparent 60%),
-        linear-gradient(160deg, var(--bg1), var(--bg2));
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
+      color: #222;
     }
-
-    .wrap{
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 22px;
+    h1{ margin: 0 0 10px; }
+    .grid{
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 15px;
     }
-
-    h1{ margin: 8px 0 8px; font-size: 26px; letter-spacing: .2px; }
-    h2{ margin: 10px 0 10px; font-size: 14px; color: var(--muted); font-weight: 650; letter-spacing: .2px; }
-
-    .row{
-      display:grid;
-      grid-template-columns: 220px 1fr 1fr 1fr;
-      gap:14px;
-      align-items:stretch;
+    .box{
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
     }
-
-    .card{
-      background: var(--card);
-      border: 1px solid var(--cardBorder);
-      border-radius: 16px;
-      padding: 14px 14px 12px;
-      min-width: 0;
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(10px);
-    }
-
-    .big{
-      font-size: 20px;
-      font-weight: 780;
-      display:flex;
-      align-items:center;
-      gap:8px;
-    }
-
-    .muted{
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.3;
-    }
-
-    .badge{
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,.16);
-      background: rgba(255,255,255,.06);
-      font-size: 12px;
-      color: var(--muted);
-      vertical-align: middle;
-    }
-
-    .badge.ok{
-      border-color: rgba(52,211,153,.35);
-      background: rgba(52,211,153,.10);
-      color: #bbf7d0;
-    }
-
-    .badge.warn{
-      border-color: rgba(245,158,11,.45);
-      background: rgba(245,158,11,.12);
-      color: #fde68a;
-    }
-
-    .probas{
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-    .probas b{
-      color: rgba(236,253,245,.92);
-      font-weight: 700;
-    }
-
-    .controls{
-      display:grid;
-      grid-template-columns: 1fr;
-      gap:10px;
-      padding: 10px 0 4px;
-    }
-
-    .ctrl-row{
-      display:flex;
-      flex-wrap:wrap;
-      gap:10px;
-      align-items:center;
-    }
-
-    .ctrl-spacer{ flex: 1 1 auto; }
-
+    .label{ color:#666; font-size: 12px; }
+    .value{ font-size: 18px; font-weight: bold; margin-top: 4px; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
     button, input{
-      padding: 10px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,.18);
-      background: rgba(255,255,255,.06);
-      color: var(--text);
-      outline: none;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #fff;
     }
-
-    input{ width: 140px; }
-
-    button{
-      cursor:pointer;
-      transition: transform .06s ease, background .15s ease, border-color .15s ease;
-      font-weight: 650;
-    }
-
-    button:hover{
-      background: rgba(255,255,255,.10);
-      border-color: rgba(255,255,255,.26);
-    }
-
-    button:active{ transform: translateY(1px); }
-
-    .btn-primary{
-      border-color: rgba(52,211,153,.35);
-      background: rgba(52,211,153,.12);
-    }
-
-    .btn-warn{
-      border-color: rgba(245,158,11,.45);
-      background: rgba(245,158,11,.14);
-    }
-
-    .btn-danger{
-      border-color: rgba(239,68,68,.55);
-      background: rgba(239,68,68,.16);
-    }
-
+    button{ cursor:pointer; }
+    button.primary{ background:#e8f5e9; border-color:#a5d6a7; }
+    button.warn{ background:#fff8e1; border-color:#ffe082; }
+    button.danger{ background:#ffebee; border-color:#ef9a9a; }
     #log{
       white-space: pre-wrap;
-      background: rgba(0,0,0,.25);
-      border: 1px solid rgba(255,255,255,.12);
-      border-radius: 16px;
-      padding: 12px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
       max-height: 260px;
       overflow: auto;
-      color: var(--muted);
-      box-shadow: var(--shadow);
-    }
-
-    .footerNote{
-      margin-top: 10px;
-      color: rgba(236,253,245,.55);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
       font-size: 12px;
+    }
+    .small{ color:#666; font-size: 12px; }
+    @media (max-width: 900px){
+      .grid{ grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Circle of Life (Live)</h1>
-    <h2 id="paramsLine">H = 30, R = 60</h2>
+  <h1>Circle of Life (Live)</h1>
+  <div class="small">Rafraichissement toutes les 200 ms.</div>
 
-    <div class="row">
-      <div class="card">
-        <div class="big">Tick: <span id="tick">-</span></div>
-        <div class="muted">État: <span id="mode" class="badge">-</span></div>
-      </div>
-
-      <div class="card">
-        <div class="big">🌿 Herbe: <span id="grass">-</span></div>
-        <div class="muted">Ressource globale de l'écosystème.</div>
-      </div>
-
-      <div class="card">
-        <div class="big">🐇 Proies: <span id="preys">-</span></div>
-        <div class="muted">Énergie (min/avg/max): <span id="preyE">-</span></div>
-        <div class="probas">
-          <div>Manger: <b><span id="preyEatP">-</span>%</b></div>
-          <div>Reproduction: <b><span id="preyRepP">-</span>%</b></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="big">🦁 Prédateurs: <span id="preds">-</span></div>
-        <div class="muted">Énergie (min/avg/max): <span id="predE">-</span></div>
-        <div class="probas">
-          <div>Chasse: <b><span id="predHuntP">-</span>%</b></div>
-          <div>Reproduction: <b><span id="predRepP">-</span>%</b></div>
-        </div>
-      </div>
+  <div class="grid">
+    <div class="box">
+      <div class="label">Tick</div>
+      <div class="value" id="tick">-</div>
+      <div class="small">Etat: <span id="mode">-</span></div>
     </div>
 
-    <h2>Contrôles</h2>
-    <div class="controls">
-      <div class="ctrl-row">
-        <button class="btn-warn" onclick="sendCmd('drought_on')">🌵 Sécheresse ON</button>
-        <button class="btn-primary" onclick="sendCmd('drought_off')">🌱 Normal</button>
-
-        <span class="muted" style="margin-left:6px;">Herbe:</span>
-        <input id="grassInput" type="number" value="100" min="0" />
-        <button class="btn-primary" onclick="setGrass()">Appliquer</button>
-      </div>
-
-      <div class="ctrl-row">
-        <button class="btn-primary" onclick="sendCmd('add_prey',{value:1})">+1 proie</button>
-        <span class="muted">Ajouter X proies:</span>
-        <input id="preyAddInput" type="number" value="1" min="1" />
-        <button class="btn-primary" onclick="addPreys()">Ajouter</button>
-
-        <span class="ctrl-spacer"></span>
-
-        <button class="btn-primary" onclick="sendCmd('add_predator',{value:1})">+1 prédateur</button>
-        <span class="muted">Ajouter X prédateurs:</span>
-        <input id="predAddInput" type="number" value="1" min="1" />
-        <button class="btn-primary" onclick="addPreds()">Ajouter</button>
-      </div>
-
-      <div class="ctrl-row">
-        <button class="btn-danger" onclick="sendCmd('reset')">Reset (état initial)</button>
-      </div>
+    <div class="box">
+      <div class="label">Herbe</div>
+      <div class="value" id="grass">-</div>
     </div>
 
-    <h2>Journal</h2>
-    <div id="log"></div>
-    <div class="footerNote">Actualisation automatique toutes les 200 ms.</div>
+    <div class="box">
+      <div class="label">Proies</div>
+      <div class="value" id="preys">-</div>
+      <div class="small">Energie (min/avg/max): <span id="preyE">-</span></div>
+      <div class="small">Manger: <span id="preyEatP">-</span>% | Repro: <span id="preyRepP">-</span>%</div>
+    </div>
+
+    <div class="box">
+      <div class="label">Predateurs</div>
+      <div class="value" id="preds">-</div>
+      <div class="small">Energie (min/avg/max): <span id="predE">-</span></div>
+      <div class="small">Chasse: <span id="predHuntP">-</span>% | Repro: <span id="predRepP">-</span>%</div>
+    </div>
   </div>
 
+  <h3>Controles</h3>
+  <div class="row">
+    <button class="warn" onclick="sendCmd('drought_on')">Secheresse ON</button>
+    <button class="primary" onclick="sendCmd('drought_off')">Normal</button>
+    <span class="small">Herbe:</span>
+    <input id="grassInput" type="number" value="100" min="0" />
+    <button class="primary" onclick="setGrass()">Appliquer</button>
+  </div>
+
+  <div class="row">
+    <button class="primary" onclick="sendCmd('add_prey',{value:1})">+1 proie</button>
+    <span class="small">Ajouter X:</span>
+    <input id="preyAddInput" type="number" value="1" min="1" />
+    <button class="primary" onclick="addPreys()">Ajouter</button>
+
+    <span style="width:20px;"></span>
+
+    <button class="primary" onclick="sendCmd('add_predator',{value:1})">+1 predateur</button>
+    <span class="small">Ajouter X:</span>
+    <input id="predAddInput" type="number" value="1" min="1" />
+    <button class="primary" onclick="addPreds()">Ajouter</button>
+  </div>
+
+  <div class="row">
+    <button class="danger" onclick="sendCmd('reset')">Reset</button>
+  </div>
+
+  <h3>Journal</h3>
+  <div id="log"></div>
+
 <script>
-  const logEl = document.getElementById('log');
+"use strict";
 
-  function pushLocalLog(line){
-    const ts = new Date().toLocaleTimeString('fr-FR', {hour12:false});
-    logEl.textContent = `[${ts}] ${line}\\n` + (logEl.textContent || '');
-  }
+const logEl = document.getElementById('log');
 
-  async function sendCmd(cmd, args){
-    try{
-      const res = await fetch('/api/cmd', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({cmd, args: args || {}})
-      });
-      const data = await res.json();
-      if(!data.ok){
-        pushLocalLog(`Erreur cmd: ${data.error || 'unknown'}`);
-      }
-    }catch(e){
-      pushLocalLog(`Erreur réseau (cmd): ${e}`);
+function pushLocalLog(line){
+  const ts = new Date().toLocaleTimeString('fr-FR', {hour12:false});
+  logEl.textContent = `[${ts}] ${line}` + String.fromCharCode(10) + (logEl.textContent || '');
+}
+
+async function sendCmd(cmd, args){
+  try{
+    const res = await fetch('/api/cmd', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cmd, args: args || {}})
+    });
+    const data = await res.json();
+    if(!data.ok){
+      pushLocalLog(`Erreur cmd: ${data.error || 'unknown'}`);
     }
+  }catch(e){
+    pushLocalLog(`Erreur reseau (cmd): ${e}`);
   }
+}
 
-  function setGrass(){
-    const v = parseInt(document.getElementById('grassInput').value, 10);
-    if(Number.isFinite(v) && v >= 0) sendCmd('set_grass', {value:v});
-  }
+function setGrass(){
+  const v = parseInt(document.getElementById('grassInput').value, 10);
+  if(Number.isFinite(v) && v >= 0) sendCmd('set_grass', {value:v});
+}
 
-  function addPreys(){
-    const v = parseInt(document.getElementById('preyAddInput').value, 10);
-    if(Number.isFinite(v) && v > 0) sendCmd('add_prey', {value:v});
-  }
+function addPreys(){
+  const v = parseInt(document.getElementById('preyAddInput').value, 10);
+  if(Number.isFinite(v) && v > 0) sendCmd('add_prey', {value:v});
+}
 
-  function addPreds(){
-    const v = parseInt(document.getElementById('predAddInput').value, 10);
-    if(Number.isFinite(v) && v > 0) sendCmd('add_predator', {value:v});
-  }
+function addPreds(){
+  const v = parseInt(document.getElementById('predAddInput').value, 10);
+  if(Number.isFinite(v) && v > 0) sendCmd('add_predator', {value:v});
+}
 
-  async function refresh(){
-    try{
-      const res = await fetch('/api/state', {cache:'no-store'});
-      const s = await res.json();
+async function refresh(){
+  try{
+    const res = await fetch('/api/state', {cache:'no-store'});
+    const s = await res.json();
 
-      if(!s || !s.ok){
-        const modeEl = document.getElementById('mode');
-        modeEl.textContent = 'en attente…';
-        modeEl.className = 'badge';
-        return;
-      }
-
-      document.getElementById('tick').textContent = s.tick;
-      document.getElementById('grass').textContent = s.grass;
-      document.getElementById('preys').textContent = s.preys;
-      document.getElementById('preds').textContent = s.predators;
-
-      const modeEl = document.getElementById('mode');
-      modeEl.textContent = s.drought ? 'SÉCHERESSE' : 'Normal';
-      modeEl.className = s.drought ? 'badge warn' : 'badge ok';
-
-      const pe = s.prey_energy || {min:0, avg:0, max:0};
-      const pr = s.pred_energy || {min:0, avg:0, max:0};
-      document.getElementById('preyE').textContent =
-        `${Number(pe.min).toFixed(0)} / ${Number(pe.avg).toFixed(1)} / ${Number(pe.max).toFixed(0)}`;
-      document.getElementById('predE').textContent =
-        `${Number(pr.min).toFixed(0)} / ${Number(pr.avg).toFixed(1)} / ${Number(pr.max).toFixed(0)}`;
-
-      // ✅ Affichage probas (objets {eat,repro} et {hunt,repro})
-      const pp = s.prey_probs || {eat:0, repro:0};
-      const dp = s.pred_probs || {hunt:0, repro:0};
-
-      document.getElementById('preyEatP').textContent = Math.round(Number(pp.eat) * 100);
-      document.getElementById('preyRepP').textContent = Math.round(Number(pp.repro) * 100);
-      document.getElementById('predHuntP').textContent = Math.round(Number(dp.hunt) * 100);
-      document.getElementById('predRepP').textContent = Math.round(Number(dp.repro) * 100);
-
-      if (Array.isArray(s.logs)) {
-        logEl.textContent = s.logs.join("\\n");
-      }
-    }catch(e){
-      pushLocalLog(`Erreur refresh: ${e}`);
+    if(!s || !s.ok){
+      document.getElementById('mode').textContent = 'en attente...';
+      return;
     }
-  }
 
-  setInterval(refresh, 200);
-  refresh();
+    document.getElementById('tick').textContent = s.tick;
+    document.getElementById('grass').textContent = s.grass;
+    document.getElementById('preys').textContent = s.preys;
+    document.getElementById('preds').textContent = s.predators;
+
+    document.getElementById('mode').textContent = s.drought ? 'SECHERESSE' : 'Normal';
+
+    const pe = s.prey_energy || {min:0, avg:0, max:0};
+    const pr = s.pred_energy || {min:0, avg:0, max:0};
+
+    document.getElementById('preyE').textContent =
+      `${Number(pe.min).toFixed(0)} / ${Number(pe.avg).toFixed(1)} / ${Number(pe.max).toFixed(0)}`;
+    document.getElementById('predE').textContent =
+      `${Number(pr.min).toFixed(0)} / ${Number(pr.avg).toFixed(1)} / ${Number(pr.max).toFixed(0)}`;
+
+    const pp = s.prey_probs || {eat:0, repro:0};
+    const dp = s.pred_probs || {hunt:0, repro:0};
+
+    document.getElementById('preyEatP').textContent = Math.round(Number(pp.eat) * 100);
+    document.getElementById('preyRepP').textContent = Math.round(Number(pp.repro) * 100);
+    document.getElementById('predHuntP').textContent = Math.round(Number(dp.hunt) * 100);
+    document.getElementById('predRepP').textContent = Math.round(Number(dp.repro) * 100);
+
+    if (Array.isArray(s.logs)) {
+      logEl.textContent = s.logs.join(String.fromCharCode(10));
+    }
+  }catch(e){
+    pushLocalLog(`Erreur refresh: ${e}`);
+  }
+}
+
+setInterval(refresh, 200);
+refresh();
 </script>
+
 </body>
 </html>
 """
+
+    # Remove BOM / invisible chars that can break JS parsing (your original error)
+    INDEX_HTML = (
+        INDEX_HTML
+        .replace("\ufeff", "")
+        .replace("\u200b", "")
+        .replace("\u200c", "")
+        .replace("\u200d", "")
+    )
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code, body, content_type="application/json"):
@@ -471,6 +340,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 raw = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
+                raw = raw.lstrip("\ufeff")
                 data = json.loads(raw)
 
                 cmd = data.get("cmd")
