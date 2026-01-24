@@ -1,7 +1,7 @@
 # config.py
 
 # Simulation timing
-TICK_DURATION = 0.2  # seconds
+TICK_DURATION = 2  # seconds
 
 # Environment
 ENV_HOST = "127.0.0.1"
