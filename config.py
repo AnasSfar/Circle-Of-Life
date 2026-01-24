@@ -23,8 +23,8 @@ R_ENERGY = 60         # reproduction threshold
 PREY_INITIAL_ENERGY = 40
 PREDATOR_INITIAL_ENERGY = 40
 
-PREY_ENERGY_DECAY = 1
-PREDATOR_ENERGY_DECAY = 2
+PREY_ENERGY_DECAY = 2
+PREDATOR_ENERGY_DECAY = 1
 
 # Reproduction energy cost
 PREY_REPRO_COST = 15
@@ -42,7 +42,7 @@ DROUGHT_GRASS_FACTOR = 0.2         # during drought, growth is reduced
 PREY_EAT_PROB = 0.8
 PREY_REPRO_PROB = 0.2
 
-PRED_HUNT_PROB = 0.8
+PRED_HUNT_PROB = 0.6
 PRED_REPRO_PROB = 0.2
 
 # Prey eating request bounds
