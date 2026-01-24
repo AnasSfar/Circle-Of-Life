@@ -184,7 +184,7 @@ def run_env(shared_env, env_to_display, display_to_env,
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind((config.ENV_HOST, config.ENV_PORT))
         server_socket.listen(10)
-        threading.Thread(target=accept_clients, daemon=True).start()
+        threading.Thread(target=accept_clients, daemon=False).start()
 
         reset_to_initial()
         tick = 0

@@ -60,8 +60,8 @@ def run_web_display(env_to_display, display_to_env, log_to_display, host="127.0.
             except Exception:
                 pass
 
-    threading.Thread(target=snapshot_loop, daemon=True).start()
-    threading.Thread(target=log_loop, daemon=True).start()
+    threading.Thread(target=snapshot_loop, daemon=False).start()
+    threading.Thread(target=log_loop, daemon=False).start()
 
     INDEX_HTML = """<!doctype html>
 <html lang="fr">
