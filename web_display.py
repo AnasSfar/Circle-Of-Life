@@ -109,7 +109,7 @@ button.danger{border-color: rgba(239,68,68,0.7);}
   max-height:260px;
   overflow:auto;
   font-family: monospace;
-  font-size:12px;
+  font-size:20px;
   color: var(--muted);
 }
 @media(max-width:900px){ .grid{grid-template-columns:repeat(2,1fr);} }
