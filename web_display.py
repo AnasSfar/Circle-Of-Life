@@ -14,6 +14,28 @@ from ipc import DisplayCommand
 
 def run_web_display(shared_state, env_to_display, display_to_env, log_to_display, host="127.0.0.1", port=8000):
     latest = {"ok": False, "reason": "no snapshot yet"}
+    latest_lock = threading.Lock()
+
+    def _extract_probs(obj, kind: str):
+        """
+        Returns dict with keys:
+          - prey:  {"eat": float, "repro": float}
+          - pred:  {"hunt": float, "repro": float}
+        Accepts tuple/list, dict, or missing.
+        """
+        if kind == "prey":
+            if isinstance(obj, (tuple, list)) and len(obj) >= 2:
+                return {"eat": float(obj[0]), "repro": float(obj[1])}
+            if isinstance(obj, dict):
+                return {"eat": float(obj.get("eat", 0.0)), "repro": float(obj.get("repro", 0.0))}
+            return {"eat": 0.0, "repro": 0.0}
+
+        # predator
+        if isinstance(obj, (tuple, list)) and len(obj) >= 2:
+            return {"hunt": float(obj[0]), "repro": float(obj[1])}
+        if isinstance(obj, dict):
+            return {"hunt": float(obj.get("hunt", 0.0)), "repro": float(obj.get("repro", 0.0))}
+        return {"hunt": 0.0, "repro": 0.0}
 
     def snapshot_loop():
         nonlocal latest
@@ -21,20 +43,28 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
             try:
                 while True:
                     s = env_to_display.get_nowait()
-                    prey_min, prey_avg, prey_max = getattr(s, "prey_energy_stats", (0, 0, 0))
-                    pred_min, pred_avg, pred_max = getattr(s, "predator_energy_stats", (0, 0, 0))
-                    latest = {
+
+                    prey_min, prey_avg, prey_max = getattr(s, "prey_energy_stats", (0.0, 0.0, 0.0))
+                    pred_min, pred_avg, pred_max = getattr(s, "predator_energy_stats", (0.0, 0.0, 0.0))
+
+                    prey_probs = _extract_probs(getattr(s, "prey_probs", None), "prey")
+                    pred_probs = _extract_probs(getattr(s, "pred_probs", None), "pred")
+
+                    payload = {
                         "ok": True,
-                        "tick": int(s.tick),
-                        "predators": int(s.predators),
-                        "preys": int(s.preys),
-                        "grass": int(s.grass),
-                        "drought": bool(s.drought),
+                        "tick": int(getattr(s, "tick", 0)),
+                        "predators": int(getattr(s, "predators", 0)),
+                        "preys": int(getattr(s, "preys", 0)),
+                        "grass": int(getattr(s, "grass", 0)),
+                        "drought": bool(getattr(s, "drought", False)),
                         "prey_energy": {"min": float(prey_min), "avg": float(prey_avg), "max": float(prey_max)},
                         "pred_energy": {"min": float(pred_min), "avg": float(pred_avg), "max": float(pred_max)},
-                        "prey_probs": {"eat": s.prey_probs[0], "repro": s.prey_probs[1]},
-                        "pred_probs": {"hunt": s.pred_probs[0], "repro": s.pred_probs[1]},
+                        "prey_probs": prey_probs,
+                        "pred_probs": pred_probs,
                     }
+
+                    with latest_lock:
+                        latest = payload
             except Exception:
                 pass
             time.sleep(0.05)
@@ -42,6 +72,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
     threading.Thread(target=snapshot_loop, daemon=True).start()
 
     logs = []  # newest first
+    logs_lock = threading.Lock()
 
     def log_loop():
         nonlocal logs
@@ -49,9 +80,10 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
             try:
                 while True:
                     line = log_to_display.get_nowait()
-                    logs.insert(0, line)
-                    if len(logs) > 200:
-                        logs = logs[:200]
+                    with logs_lock:
+                        logs.insert(0, line)
+                        if len(logs) > 200:
+                            logs = logs[:200]
             except Exception:
                 pass
             time.sleep(0.05)
@@ -72,8 +104,6 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       --cardBorder: rgba(255,255,255,.14);
       --text:#ecfdf5;
       --muted: rgba(236,253,245,.72);
-      --warn:#f59e0b;
-      --danger:#ef4444;
       --shadow: 0 12px 40px rgba(0,0,0,.35);
     }
 
@@ -97,10 +127,9 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
     h1{ margin: 8px 0 8px; font-size: 26px; letter-spacing: .2px; }
     h2{ margin: 10px 0 10px; font-size: 14px; color: var(--muted); font-weight: 650; letter-spacing: .2px; }
 
-    /* --- TOP CARDS: Tick + (Grass/Preys/Predators) on one line --- */
     .row{
       display:grid;
-      grid-template-columns: 220px 1fr 1fr 1fr; /* Tick narrow + 3 cards */
+      grid-template-columns: 220px 1fr 1fr 1fr;
       gap:14px;
       align-items:stretch;
     }
@@ -166,7 +195,6 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       font-weight: 700;
     }
 
-    /* --- CONTROLS: 3 lines aligned --- */
     .controls{
       display:grid;
       grid-template-columns: 1fr;
@@ -192,7 +220,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       outline: none;
     }
 
-    input{ width: 120px; }
+    input{ width: 140px; }
 
     button{
       cursor:pointer;
@@ -244,7 +272,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
 <body>
   <div class="wrap">
     <h1>Circle of Life (Live)</h1>
-    <h2>H = 30, R = 60</h2>
+    <h2 id="paramsLine">H = 30, R = 60</h2>
 
     <div class="row">
       <div class="card">
@@ -261,8 +289,8 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
         <div class="big">🐇 Proies: <span id="preys">-</span></div>
         <div class="muted">Énergie (min/avg/max): <span id="preyE">-</span></div>
         <div class="probas">
-          <div>Manger: <b><span id="preyEatP">80</span>%</b></div>
-          <div>Reproduction: <b><span id="preyRepP">50</span>%</b></div>
+          <div>Manger: <b><span id="preyEatP">-</span>%</b></div>
+          <div>Reproduction: <b><span id="preyRepP">-</span>%</b></div>
         </div>
       </div>
 
@@ -270,15 +298,14 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
         <div class="big">🦁 Prédateurs: <span id="preds">-</span></div>
         <div class="muted">Énergie (min/avg/max): <span id="predE">-</span></div>
         <div class="probas">
-          <div>Chasse: <b><span id="predHuntP">80</span>%</b></div>
-          <div>Reproduction: <b><span id="predRepP">50</span>%</b></div>
+          <div>Chasse: <b><span id="predHuntP">-</span>%</b></div>
+          <div>Reproduction: <b><span id="predRepP">-</span>%</b></div>
         </div>
       </div>
     </div>
 
     <h2>Contrôles</h2>
     <div class="controls">
-      <!-- Ligne 1: herbe + état -->
       <div class="ctrl-row">
         <button class="btn-warn" onclick="sendCmd('drought_on')">🌵 Sécheresse ON</button>
         <button class="btn-primary" onclick="sendCmd('drought_off')">🌱 Normal</button>
@@ -288,7 +315,6 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
         <button class="btn-primary" onclick="setGrass()">Appliquer</button>
       </div>
 
-      <!-- Ligne 2: proies / prédateurs -->
       <div class="ctrl-row">
         <button class="btn-primary" onclick="sendCmd('add_prey',{value:1})">+1 proie</button>
         <span class="muted">Ajouter X proies:</span>
@@ -303,7 +329,6 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
         <button class="btn-primary" onclick="addPreds()">Ajouter</button>
       </div>
 
-      <!-- Ligne 3: reset -->
       <div class="ctrl-row">
         <button class="btn-danger" onclick="sendCmd('reset')">Reset (état initial)</button>
       </div>
@@ -317,6 +342,11 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
 <script>
   const logEl = document.getElementById('log');
 
+  function pushLocalLog(line){
+    const ts = new Date().toLocaleTimeString('fr-FR', {hour12:false});
+    logEl.textContent = `[${ts}] ${line}\\n` + (logEl.textContent || '');
+  }
+
   async function sendCmd(cmd, args){
     try{
       const res = await fetch('/api/cmd', {
@@ -326,10 +356,10 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       });
       const data = await res.json();
       if(!data.ok){
-        logEl.textContent = `Erreur cmd: ${data.error || 'unknown'}\\n` + logEl.textContent;
+        pushLocalLog(`Erreur cmd: ${data.error || 'unknown'}`);
       }
     }catch(e){
-      logEl.textContent = `Erreur réseau: ${e}\\n` + logEl.textContent;
+      pushLocalLog(`Erreur réseau (cmd): ${e}`);
     }
   }
 
@@ -348,50 +378,50 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
     if(Number.isFinite(v) && v > 0) sendCmd('add_predator', {value:v});
   }
 
-async function refresh(){
-  try{
-    const res = await fetch('/api/state', {cache:'no-store'});
-    const s = await res.json();
+  async function refresh(){
+    try{
+      const res = await fetch('/api/state', {cache:'no-store'});
+      const s = await res.json();
 
-    if(!s.ok) return;
+      if(!s || !s.ok){
+        const modeEl = document.getElementById('mode');
+        modeEl.textContent = 'en attente…';
+        modeEl.className = 'badge';
+        return;
+      }
 
-    document.getElementById('tick').textContent = s.tick;
-    document.getElementById('grass').textContent = s.grass;
-    document.getElementById('preys').textContent = s.preys;
-    document.getElementById('preds').textContent = s.predators;
+      document.getElementById('tick').textContent = s.tick;
+      document.getElementById('grass').textContent = s.grass;
+      document.getElementById('preys').textContent = s.preys;
+      document.getElementById('preds').textContent = s.predators;
 
-    const modeEl = document.getElementById('mode');
-    modeEl.textContent = s.drought ? 'SÉCHERESSE' : 'Normal';
-    modeEl.className = s.drought ? 'badge warn' : 'badge ok';
+      const modeEl = document.getElementById('mode');
+      modeEl.textContent = s.drought ? 'SÉCHERESSE' : 'Normal';
+      modeEl.className = s.drought ? 'badge warn' : 'badge ok';
 
-    const pe = s.prey_energy;
-    const pr = s.pred_energy;
-    document.getElementById('preyE').textContent =
-      `${pe.min.toFixed(0)} / ${pe.avg.toFixed(1)} / ${pe.max.toFixed(0)}`;
-    document.getElementById('predE').textContent =
-      `${pr.min.toFixed(0)} / ${pr.avg.toFixed(1)} / ${pr.max.toFixed(0)}`;
+      const pe = s.prey_energy || {min:0, avg:0, max:0};
+      const pr = s.pred_energy || {min:0, avg:0, max:0};
+      document.getElementById('preyE').textContent =
+        `${Number(pe.min).toFixed(0)} / ${Number(pe.avg).toFixed(1)} / ${Number(pe.max).toFixed(0)}`;
+      document.getElementById('predE').textContent =
+        `${Number(pr.min).toFixed(0)} / ${Number(pr.avg).toFixed(1)} / ${Number(pr.max).toFixed(0)}`;
 
-    // 🔽 ICI EXACTEMENT
-    if (s.prey_probs && s.pred_probs) {
-      document.getElementById('preyEatP').textContent =
-        Math.round(s.prey_probs.eat * 100);
-      document.getElementById('preyRepP').textContent =
-        Math.round(s.prey_probs.repro * 100);
+      // ✅ Affichage probas (objets {eat,repro} et {hunt,repro})
+      const pp = s.prey_probs || {eat:0, repro:0};
+      const dp = s.pred_probs || {hunt:0, repro:0};
 
-      document.getElementById('predHuntP').textContent =
-        Math.round(s.pred_probs.hunt * 100);
-      document.getElementById('predRepP').textContent =
-        Math.round(s.pred_probs.repro * 100);
+      document.getElementById('preyEatP').textContent = Math.round(Number(pp.eat) * 100);
+      document.getElementById('preyRepP').textContent = Math.round(Number(pp.repro) * 100);
+      document.getElementById('predHuntP').textContent = Math.round(Number(dp.hunt) * 100);
+      document.getElementById('predRepP').textContent = Math.round(Number(dp.repro) * 100);
+
+      if (Array.isArray(s.logs)) {
+        logEl.textContent = s.logs.join("\\n");
+      }
+    }catch(e){
+      pushLocalLog(`Erreur refresh: ${e}`);
     }
-
-    if (Array.isArray(s.logs)) {
-      logEl.textContent = s.logs.join("\n");
-    }
-  }catch(e){
-    logEl.textContent = `Erreur refresh: ${e}\n` + logEl.textContent;
   }
-}
-
 
   setInterval(refresh, 200);
   refresh();
@@ -422,11 +452,15 @@ async function refresh(){
             if self.path == "/" or self.path.startswith("/index.html"):
                 self._send(200, INDEX_HTML, content_type="text/html")
                 return
+
             if self.path.startswith("/api/state"):
-                payload = dict(latest)
-                payload["logs"] = logs
+                with latest_lock:
+                    payload = dict(latest)
+                with logs_lock:
+                    payload["logs"] = list(logs)
                 self._send(200, payload)
                 return
+
             self._send(404, {"ok": False, "error": "not found"})
 
         def do_POST(self):
