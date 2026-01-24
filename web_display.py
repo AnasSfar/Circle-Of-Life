@@ -91,9 +91,9 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
   <title>Circle of Life (Local)</title>
 <style>
   :root{
-    --bg1:#0f2027;
-    --bg2:#203a43;
-    --bg3:#2c5364;
+    --bg1:#06140e;   
+    --bg2:#0b2a1d;     
+    --bg3:#14532d;     
     --card: rgba(255,255,255,0.08);
     --border: rgba(255,255,255,0.18);
     --text: #f1f5f9;
