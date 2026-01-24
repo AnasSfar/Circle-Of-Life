@@ -1,5 +1,8 @@
 # web_display.py
-# Live HTML dashboard + JSON API for the Circle of Life simulation
+# Live HTML dashboard + JSON API for the Circle of Life simulation (LOCAL)
+#  - GET  /           -> HTML page
+#  - GET  /api/state  -> latest snapshot + logs as JSON
+#  - POST /api/cmd    -> send command to env via display_to_env queue
 
 import json
 import time
@@ -10,12 +13,6 @@ from ipc import DisplayCommand
 
 
 def run_web_display(shared_state, env_to_display, display_to_env, log_to_display, host="127.0.0.1", port=8000):
-    """
-    Live HTML dashboard + JSON API.
-      - GET  /           -> HTML page
-      - GET  /api/state  -> latest snapshot as JSON
-      - POST /api/cmd    -> send command to env via display_to_env queue
-    """
     latest = {"ok": False, "reason": "no snapshot yet"}
 
     def snapshot_loop():
@@ -28,13 +25,15 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
                     pred_min, pred_avg, pred_max = getattr(s, "predator_energy_stats", (0, 0, 0))
                     latest = {
                         "ok": True,
-                        "tick": s.tick,
-                        "predators": s.predators,
-                        "preys": s.preys,
-                        "grass": s.grass,
-                        "drought": s.drought,
+                        "tick": int(s.tick),
+                        "predators": int(s.predators),
+                        "preys": int(s.preys),
+                        "grass": int(s.grass),
+                        "drought": bool(s.drought),
                         "prey_energy": {"min": float(prey_min), "avg": float(prey_avg), "max": float(prey_max)},
                         "pred_energy": {"min": float(pred_min), "avg": float(pred_avg), "max": float(pred_max)},
+                        "prey_probs": {"eat": s.prey_probs[0], "repro": s.prey_probs[1]},
+                        "pred_probs": {"hunt": s.pred_probs[0], "repro": s.pred_probs[1]},
                     }
             except Exception:
                 pass
@@ -42,7 +41,8 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
 
     threading.Thread(target=snapshot_loop, daemon=True).start()
 
-    logs = []  
+    logs = []  # newest first
+
     def log_loop():
         nonlocal logs
         while shared_state.get("running", False):
@@ -63,7 +63,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Circle of Life - Live</title>
+  <title>Circle of Life (Local)</title>
   <style>
     :root{
       --bg1:#071a12;
@@ -72,7 +72,6 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       --cardBorder: rgba(255,255,255,.14);
       --text:#ecfdf5;
       --muted: rgba(236,253,245,.72);
-      --accent:#34d399;
       --warn:#f59e0b;
       --danger:#ef4444;
       --shadow: 0 12px 40px rgba(0,0,0,.35);
@@ -95,25 +94,14 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       padding: 22px;
     }
 
-    h1{
-      margin: 8px 0 14px;
-      font-size: 26px;
-      letter-spacing: .2px;
-    }
+    h1{ margin: 8px 0 8px; font-size: 26px; letter-spacing: .2px; }
+    h2{ margin: 10px 0 10px; font-size: 14px; color: var(--muted); font-weight: 650; letter-spacing: .2px; }
 
-    h2{
-      margin: 18px 0 10px;
-      font-size: 16px;
-      color: var(--muted);
-      font-weight: 650;
-      letter-spacing: .2px;
-      text-transform: uppercase;
-    }
-
+    /* --- TOP CARDS: Tick + (Grass/Preys/Predators) on one line --- */
     .row{
-      display:flex;
+      display:grid;
+      grid-template-columns: 220px 1fr 1fr 1fr; /* Tick narrow + 3 cards */
       gap:14px;
-      flex-wrap:wrap;
       align-items:stretch;
     }
 
@@ -122,7 +110,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       border: 1px solid var(--cardBorder);
       border-radius: 16px;
       padding: 14px 14px 12px;
-      min-width: 250px;
+      min-width: 0;
       box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
     }
@@ -167,13 +155,33 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       color: #fde68a;
     }
 
+    .probas{
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .probas b{
+      color: rgba(236,253,245,.92);
+      font-weight: 700;
+    }
+
+    /* --- CONTROLS: 3 lines aligned --- */
     .controls{
-      display:flex;
+      display:grid;
+      grid-template-columns: 1fr;
       gap:10px;
-      flex-wrap:wrap;
-      align-items:center;
       padding: 10px 0 4px;
     }
+
+    .ctrl-row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:center;
+    }
+
+    .ctrl-spacer{ flex: 1 1 auto; }
 
     button, input{
       padding: 10px 12px;
@@ -184,9 +192,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       outline: none;
     }
 
-    input{
-      width: 120px;
-    }
+    input{ width: 120px; }
 
     button{
       cursor:pointer;
@@ -199,9 +205,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       border-color: rgba(255,255,255,.26);
     }
 
-    button:active{
-      transform: translateY(1px);
-    }
+    button:active{ transform: translateY(1px); }
 
     .btn-primary{
       border-color: rgba(52,211,153,.35);
@@ -224,7 +228,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       border: 1px solid rgba(255,255,255,.12);
       border-radius: 16px;
       padding: 12px;
-      max-height: 220px;
+      max-height: 260px;
       overflow: auto;
       color: var(--muted);
       box-shadow: var(--shadow);
@@ -241,6 +245,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
   <div class="wrap">
     <h1>Circle of Life (Live)</h1>
     <h2>H = 30, R = 60</h2>
+
     <div class="row">
       <div class="card">
         <div class="big">Tick: <span id="tick">-</span></div>
@@ -255,33 +260,53 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
       <div class="card">
         <div class="big">🐇 Proies: <span id="preys">-</span></div>
         <div class="muted">Énergie (min/avg/max): <span id="preyE">-</span></div>
+        <div class="probas">
+          <div>Manger: <b><span id="preyEatP">70</span>%</b></div>
+          <div>Reproduction: <b><span id="preyRepP">25</span>%</b></div>
+        </div>
       </div>
 
       <div class="card">
         <div class="big">🦁 Prédateurs: <span id="preds">-</span></div>
         <div class="muted">Énergie (min/avg/max): <span id="predE">-</span></div>
+        <div class="probas">
+          <div>Chasse: <b><span id="predHuntP">60</span>%</b></div>
+          <div>Reproduction: <b><span id="predRepP">20</span>%</b></div>
+        </div>
       </div>
     </div>
 
     <h2>Contrôles</h2>
     <div class="controls">
-      <button class="btn-warn" onclick="sendCmd('drought_on')">🌵 Sécheresse ON</button>
-      <button class="btn-primary" onclick="sendCmd('drought_off')">🌱 Normal</button>
+      <!-- Ligne 1: herbe + état -->
+      <div class="ctrl-row">
+        <button class="btn-warn" onclick="sendCmd('drought_on')">🌵 Sécheresse ON</button>
+        <button class="btn-primary" onclick="sendCmd('drought_off')">🌱 Normal</button>
 
-      <span class="muted" style="margin-left:6px;">Herbe:</span>
-      <input id="grassInput" type="number" value="100" min="0" />
-      <button class="btn-primary" onclick="setGrass()">Appliquer</button>
+        <span class="muted" style="margin-left:6px;">Herbe:</span>
+        <input id="grassInput" type="number" value="100" min="0" />
+        <button class="btn-primary" onclick="setGrass()">Appliquer</button>
+      </div>
 
-      <span class="muted" style="margin-left:6px;">Ajouter X proies:</span>
-      <input id="preyAddInput" type="number" value="1" min="1" />
-      <button class="btn-primary" onclick="addPreys()">Ajouter</button>
+      <!-- Ligne 2: proies / prédateurs -->
+      <div class="ctrl-row">
+        <button class="btn-primary" onclick="sendCmd('add_prey',{value:1})">+1 proie</button>
+        <span class="muted">Ajouter X proies:</span>
+        <input id="preyAddInput" type="number" value="1" min="1" />
+        <button class="btn-primary" onclick="addPreys()">Ajouter</button>
 
-      <span class="muted" style="margin-left:6px;">Ajouter X prédateurs:</span>
-      <input id="predAddInput" type="number" value="1" min="1" />
-      <button class="btn-primary" onclick="addPreds()">Ajouter</button>
+        <span class="ctrl-spacer"></span>
 
-      <button class="btn-danger" onclick="sendCmd('reset')">Reset (état initial)</button>
-      <button class="btn-danger" onclick="sendCmd('stop')">Stop</button>
+        <button class="btn-primary" onclick="sendCmd('add_predator',{value:1})">+1 prédateur</button>
+        <span class="muted">Ajouter X prédateurs:</span>
+        <input id="predAddInput" type="number" value="1" min="1" />
+        <button class="btn-primary" onclick="addPreds()">Ajouter</button>
+      </div>
+
+      <!-- Ligne 3: reset -->
+      <div class="ctrl-row">
+        <button class="btn-danger" onclick="sendCmd('reset')">Reset (état initial)</button>
+      </div>
     </div>
 
     <h2>Journal</h2>
@@ -292,11 +317,6 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
 <script>
   const logEl = document.getElementById('log');
 
-  function log(msg){
-    const t = new Date().toLocaleTimeString();
-    logEl.textContent = `[${t}] ${msg}\\n` + logEl.textContent;
-  }
-
   async function sendCmd(cmd, args){
     try{
       const res = await fetch('/api/cmd', {
@@ -305,41 +325,35 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
         body: JSON.stringify({cmd, args: args || {}})
       });
       const data = await res.json();
-      if(data.ok) log(`Commande envoyée: ${cmd}`);
-      else log(`Erreur cmd: ${data.error || 'unknown'}`);
+      if(!data.ok){
+        logEl.textContent = `Erreur cmd: ${data.error || 'unknown'}\\n` + logEl.textContent;
+      }
     }catch(e){
-      log(`Erreur réseau: ${e}`);
+      logEl.textContent = `Erreur réseau: ${e}\\n` + logEl.textContent;
     }
   }
 
   function setGrass(){
     const v = parseInt(document.getElementById('grassInput').value, 10);
     if(Number.isFinite(v) && v >= 0) sendCmd('set_grass', {value:v});
-    else log('Valeur herbe invalide');
   }
 
   function addPreys(){
     const v = parseInt(document.getElementById('preyAddInput').value, 10);
     if(Number.isFinite(v) && v > 0) sendCmd('add_prey', {value:v});
-    else log('Valeur X proies invalide');
   }
 
   function addPreds(){
     const v = parseInt(document.getElementById('predAddInput').value, 10);
     if(Number.isFinite(v) && v > 0) sendCmd('add_predator', {value:v});
-    else log('Valeur X prédateurs invalide');
   }
 
-  async function refresh(){
+async function refresh(){
   try{
     const res = await fetch('/api/state', {cache:'no-store'});
     const s = await res.json();
-    if(!s.ok){
-      const modeEl = document.getElementById('mode');
-      modeEl.textContent = 'en attente…';
-      modeEl.className = 'badge';
-      return;
-    }
+
+    if(!s.ok) return;
 
     document.getElementById('tick').textContent = s.tick;
     document.getElementById('grass').textContent = s.grass;
@@ -352,15 +366,32 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
 
     const pe = s.prey_energy;
     const pr = s.pred_energy;
-    document.getElementById('preyE').textContent = `${pe.min.toFixed(0)} / ${pe.avg.toFixed(1)} / ${pe.max.toFixed(0)}`;
-    document.getElementById('predE').textContent = `${pr.min.toFixed(0)} / ${pr.avg.toFixed(1)} / ${pr.max.toFixed(0)}`;
+    document.getElementById('preyE').textContent =
+      `${pe.min.toFixed(0)} / ${pe.avg.toFixed(1)} / ${pe.max.toFixed(0)}`;
+    document.getElementById('predE').textContent =
+      `${pr.min.toFixed(0)} / ${pr.avg.toFixed(1)} / ${pr.max.toFixed(0)}`;
+
+    // 🔽 ICI EXACTEMENT
+    if (s.prey_probs && s.pred_probs) {
+      document.getElementById('preyEatP').textContent =
+        Math.round(s.prey_probs.eat * 100);
+      document.getElementById('preyRepP').textContent =
+        Math.round(s.prey_probs.repro * 100);
+
+      document.getElementById('predHuntP').textContent =
+        Math.round(s.pred_probs.hunt * 100);
+      document.getElementById('predRepP').textContent =
+        Math.round(s.pred_probs.repro * 100);
+    }
 
     if (Array.isArray(s.logs)) {
       logEl.textContent = s.logs.join("\n");
     }
   }catch(e){
-    log(`Erreur refresh: ${e}`);
+    logEl.textContent = `Erreur refresh: ${e}\n` + logEl.textContent;
   }
+}
+
 
   setInterval(refresh, 200);
   refresh();
@@ -375,6 +406,9 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
                 body = json.dumps(body).encode("utf-8")
             elif isinstance(body, str):
                 body = body.encode("utf-8")
+            else:
+                body = json.dumps({"ok": False, "error": "invalid response"}).encode("utf-8")
+
             self.send_response(code)
             self.send_header("Content-Type", content_type + "; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -382,7 +416,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
             self.wfile.write(body)
 
         def log_message(self, fmt, *args):
-            return  # silence
+            return
 
         def do_GET(self):
             if self.path == "/" or self.path.startswith("/index.html"):
@@ -394,7 +428,6 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
                 self._send(200, payload)
                 return
             self._send(404, {"ok": False, "error": "not found"})
-
 
         def do_POST(self):
             if self.path != "/api/cmd":
@@ -422,7 +455,7 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
                 self._send(500, {"ok": False, "error": str(e)})
 
     server = HTTPServer((host, port), Handler)
-    print(f"WEB: http://{host}:{port} (Ctrl+C pour arrêter)")
+    print(f"WEB: http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

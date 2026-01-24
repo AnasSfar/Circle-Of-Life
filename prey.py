@@ -16,8 +16,8 @@ def run_prey(energies_to_env, events_to_env, ctrl_q):
     repro_tries_left = 3
 
     # Probabilités (Option A)
-    EAT_PROB = 0.7
-    REPRO_PROB = 0.25
+    EAT_PROB = 0.8
+    REPRO_PROB = 0.5
 
     while my_energy > 0:
         time.sleep(config.TICK_DURATION)
