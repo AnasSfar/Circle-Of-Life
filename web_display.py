@@ -145,7 +145,7 @@ button.danger{border-color: rgba(239,68,68,0.7);}
 
   <h3>Controls</h3>
   <div class="row">
-    <button class="warn" onclick="sendCmd('drought_toggle')">Toggle drought (signal)</button>
+  <button class="btn-warn" onclick="sendCmd('trigger_drought')">🌵 Sécheresse (signal)</button>
     <button class="primary" onclick="sendCmd('add_prey',{value:1})">+1 prey</button>
     <button class="primary" onclick="sendCmd('add_predator',{value:1})">+1 predator</button>
     <button class="danger" onclick="sendCmd('reset')">Reset</button>

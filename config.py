@@ -5,7 +5,7 @@ TICK_DURATION = 0.2  # seconds
 
 # Environment
 ENV_HOST = "127.0.0.1"
-ENV_PORT = 8000
+ENV_PORT = 9000
 
 # Limits
 MAX_PREYS = 200
@@ -48,3 +48,8 @@ PREY_MAX_EAT_FACTOR = 2   # requested max = int(R_ENERGY * factor)
 # Drought scheduling (env self-timer)
 ENABLE_DROUGHT_TIMER = False
 DROUGHT_TIMER_EVERY_SEC = 15
+
+DROUGHT_MIN_SECONDS = 8
+DROUGHT_MAX_SECONDS = 18
+NORMAL_MIN_SECONDS = 10
+NORMAL_MAX_SECONDS = 25
