@@ -10,10 +10,10 @@ ENV_PORT = 9000
 # Limits
 MAX_PREYS = 200
 MAX_PREDATORS = 80
-MAX_GRASS = 2000
+MAX_GRASS = 5000
 
 # Initial state
-INITIAL_GRASS = 1000
+INITIAL_GRASS = 2000
 
 # Energy thresholds
 H_ENERGY = 30         # hungry/active threshold
@@ -35,7 +35,7 @@ PREY_GRASS_GAIN_PER_UNIT = 0.25       # 1 grass -> +1 energy
 PREDATOR_EAT_GAIN = 40
 
 # Grass dynamics
-GRASS_GROWTH_PER_TICK = 5
+GRASS_GROWTH_PER_TICK = 50
 DROUGHT_GRASS_FACTOR = 0.2         # during drought, growth is reduced
 
 # Decision probabilities
