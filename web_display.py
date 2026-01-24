@@ -89,55 +89,116 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Circle of Life (Local)</title>
-  <style>
-    body{
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f5f5f5;
-      color: #222;
-    }
-    h1{ margin: 0 0 10px; }
+<style>
+  :root{
+    --bg1:#0f2027;
+    --bg2:#203a43;
+    --bg3:#2c5364;
+    --card: rgba(255,255,255,0.08);
+    --border: rgba(255,255,255,0.18);
+    --text: #f1f5f9;
+    --muted: rgba(241,245,249,0.7);
+  }
+
+  body{
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+    background: linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3));
+    color: var(--text);
+  }
+
+  h1, h3{ margin-top: 0; }
+  .small{ color: var(--muted); font-size: 12px; }
+
+  .grid{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 15px 0;
+  }
+
+  .box{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+  }
+
+  .label{
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .value{
+    font-size: 20px;
+    font-weight: bold;
+    margin-top: 4px;
+  }
+
+  .row{
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 10px 0;
+  }
+
+  button, input{
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+    outline: none;
+  }
+
+  input{
+    width: 120px;
+  }
+
+  button{
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  button:hover{
+    background: rgba(255,255,255,0.18);
+  }
+
+  button.primary{
+    border-color: rgba(52,211,153,0.6);
+  }
+
+  button.warn{
+    border-color: rgba(245,158,11,0.7);
+  }
+
+  button.danger{
+    border-color: rgba(239,68,68,0.7);
+  }
+
+  #log{
+    white-space: pre-wrap;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    max-height: 260px;
+    overflow: auto;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 900px){
     .grid{
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-bottom: 15px;
+      grid-template-columns: repeat(2, 1fr);
     }
-    .box{
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 10px;
-    }
-    .label{ color:#666; font-size: 12px; }
-    .value{ font-size: 18px; font-weight: bold; margin-top: 4px; }
-    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
-    button, input{
-      padding: 8px 10px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      background: #fff;
-    }
-    button{ cursor:pointer; }
-    button.primary{ background:#e8f5e9; border-color:#a5d6a7; }
-    button.warn{ background:#fff8e1; border-color:#ffe082; }
-    button.danger{ background:#ffebee; border-color:#ef9a9a; }
-    #log{
-      white-space: pre-wrap;
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 10px;
-      max-height: 260px;
-      overflow: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
-    }
-    .small{ color:#666; font-size: 12px; }
-    @media (max-width: 900px){
-      .grid{ grid-template-columns: repeat(2, 1fr); }
-    }
-  </style>
+  }
+</style>
+
 </head>
 <body>
   <h1>Circle of Life (Live)</h1>
