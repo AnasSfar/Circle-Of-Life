@@ -1,25 +1,16 @@
-# prey.py
-# Prey process: reads shared env (grass/drought/tick) but does not write it.
-# It requests resources via events_to_env and receives grants via ctrl_q.
-
 import os
-import random
 import time
+import random
 import socket
 import config
 
 
 def _join_env_socket(kind: str, host: str, port: int, pid: int):
-    """
-    Join handshake required by the spec:
-    env listens on socket, predator/prey connect and register.
-    """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(2.0)
     try:
         s.connect((host, port))
-        msg = f"{kind} {pid}\n".encode("utf-8")
-        s.sendall(msg)
+        s.sendall(f"{kind} {pid}\n".encode("utf-8"))
     finally:
         try:
             s.close()
@@ -31,11 +22,8 @@ def run_prey(shared_env, energies_to_env, events_to_env, ctrl_q):
     pid = os.getpid()
     _join_env_socket("prey", config.ENV_HOST, config.ENV_PORT, pid)
 
-    my_energy = config.PREY_INITIAL_ENERGY
+    my_energy = float(config.PREY_INITIAL_ENERGY)
     active = False
-
-    eat_tries_left = 3
-    repro_tries_left = 3
 
     while my_energy > 0 and shared_env.running.value:
         time.sleep(config.TICK_DURATION)
@@ -49,12 +37,12 @@ def run_prey(shared_env, energies_to_env, events_to_env, ctrl_q):
                     return
                 elif msg[0] == "grass_grant":
                     granted = int(msg[1])
-                    my_energy += granted  # 1 grass = 1 energy
+                    my_energy += granted * float(getattr(config, "PREY_GRASS_GAIN_PER_UNIT", 1))
         except Exception:
             pass
 
         # decay
-        my_energy -= config.PREY_ENERGY_DECAY
+        my_energy -= float(config.PREY_ENERGY_DECAY)
 
         # active/passive with hysteresis
         if my_energy < config.H_ENERGY:
@@ -62,22 +50,18 @@ def run_prey(shared_env, energies_to_env, events_to_env, ctrl_q):
         elif my_energy > config.H_ENERGY * 1.5:
             active = False
 
-        # Eat: up to 3 attempts
-        if active and eat_tries_left > 0:
-            eat_tries_left -= 1
+        # Eat: every tick if active (probabilistic)
+        if active and random.random() < config.PREY_EAT_PROB:
             requested = random.randint(
-                config.PREY_MIN_EAT,
-                max(config.PREY_MIN_EAT, int(config.R_ENERGY * config.PREY_MAX_EAT_FACTOR))
+                int(config.PREY_MIN_EAT),
+                max(int(config.PREY_MIN_EAT), int(config.R_ENERGY * config.PREY_MAX_EAT_FACTOR))
             )
-            if random.random() < config.PREY_EAT_PROB:
-                events_to_env.put(("eat_grass", pid, requested))
+            events_to_env.put(("eat_grass", pid, requested))
 
-        # Reproduction: up to 3 attempts
-        if my_energy > config.R_ENERGY and repro_tries_left > 0:
-            repro_tries_left -= 1
-            if random.random() < config.PREY_REPRO_PROB:
-                events_to_env.put(("spawn_prey", 1))
-                my_energy -= config.PREY_REPRO_COST
+        # Reproduction: every tick if enough energy (probabilistic)
+        if my_energy > config.R_ENERGY and random.random() < config.PREY_REPRO_PROB:
+            events_to_env.put(("spawn_prey", 1))
+            my_energy -= float(getattr(config, "PREY_REPRO_COST", 15))
 
         energies_to_env.put(("prey", pid, float(my_energy), bool(active)))
 

@@ -1,10 +1,6 @@
-# predator.py
-# Predator process: reads shared env (grass/drought/tick) but does not write it.
-# It requests hunts via events_to_env and receives results via ctrl_q.
-
 import os
-import random
 import time
+import random
 import socket
 import config
 
@@ -14,8 +10,7 @@ def _join_env_socket(kind: str, host: str, port: int, pid: int):
     s.settimeout(2.0)
     try:
         s.connect((host, port))
-        msg = f"{kind} {pid}\n".encode("utf-8")
-        s.sendall(msg)
+        s.sendall(f"{kind} {pid}\n".encode("utf-8"))
     finally:
         try:
             s.close()
@@ -27,11 +22,8 @@ def run_predator(shared_env, energies_to_env, events_to_env, ctrl_q):
     pid = os.getpid()
     _join_env_socket("predator", config.ENV_HOST, config.ENV_PORT, pid)
 
-    my_energy = config.PREDATOR_INITIAL_ENERGY
+    my_energy = float(config.PREDATOR_INITIAL_ENERGY)
     active = False
-
-    hunt_tries_left = 3
-    repro_tries_left = 3
 
     while my_energy > 0 and shared_env.running.value:
         time.sleep(config.TICK_DURATION)
@@ -45,12 +37,12 @@ def run_predator(shared_env, energies_to_env, events_to_env, ctrl_q):
                     return
                 elif msg[0] == "hunt_result":
                     if bool(msg[1]):
-                        my_energy += config.PREDATOR_EAT_GAIN
+                        my_energy += float(config.PREDATOR_EAT_GAIN)
         except Exception:
             pass
 
         # decay
-        my_energy -= config.PREDATOR_ENERGY_DECAY
+        my_energy -= float(config.PREDATOR_ENERGY_DECAY)
 
         # active/passive with hysteresis
         if my_energy < config.H_ENERGY:
@@ -58,18 +50,14 @@ def run_predator(shared_env, energies_to_env, events_to_env, ctrl_q):
         elif my_energy > config.H_ENERGY * 1.5:
             active = False
 
-        # Hunt: up to 3 attempts
-        if active and hunt_tries_left > 0:
-            hunt_tries_left -= 1
-            if random.random() < config.PRED_HUNT_PROB:
-                events_to_env.put(("hunt", pid))
+        # Hunt: every tick if active (probabilistic)
+        if active and random.random() < config.PRED_HUNT_PROB:
+            events_to_env.put(("hunt", pid))
 
-        # Reproduction: up to 3 attempts
-        if my_energy > config.R_ENERGY and repro_tries_left > 0:
-            repro_tries_left -= 1
-            if random.random() < config.PRED_REPRO_PROB:
-                events_to_env.put(("spawn_predator", 1))
-                my_energy -= config.PRED_REPRO_COST
+        # Reproduction: every tick if enough energy (probabilistic)
+        if my_energy > config.R_ENERGY and random.random() < config.PRED_REPRO_PROB:
+            events_to_env.put(("spawn_predator", 1))
+            my_energy -= float(getattr(config, "PRED_REPRO_COST", 20))
 
         energies_to_env.put(("predator", pid, float(my_energy), bool(active)))
 
