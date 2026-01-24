@@ -1,4 +1,4 @@
-# env.py — UNIX-LIKE FINAL VERSION
+# env.py — UNIX-LIKE FINAL VERSION (with logs + reproduction + robust join thread)
 # Requires: Linux / WSL / VM (POSIX signals)
 
 import os
@@ -67,16 +67,15 @@ def run_env(shared_env, env_to_display, display_to_env,
             is_drought = bool(shared_env.drought.value)
 
         if is_drought:
-            dt = random.randint(config.DROUGHT_MIN_SECONDS,
-                                config.DROUGHT_MAX_SECONDS)
+            dt = random.randint(config.DROUGHT_MIN_SECONDS, config.DROUGHT_MAX_SECONDS)
         else:
-            dt = random.randint(config.NORMAL_MIN_SECONDS,
-                                config.NORMAL_MAX_SECONDS)
+            dt = random.randint(config.NORMAL_MIN_SECONDS, config.NORMAL_MAX_SECONDS)
 
         signal.setitimer(signal.ITIMER_REAL, float(dt))
         _log(log_to_display, f"[DROUGHT] next signal in {dt}s")
 
     def alarm_handler(signum, frame):
+        # SIGALRM -> trigger SIGUSR1 (spec demo: drought notified by a signal)
         os.kill(os.getpid(), DROUGHT_SIGNAL)
         schedule_next_drought()
 
@@ -84,7 +83,18 @@ def run_env(shared_env, env_to_display, display_to_env,
     # RESET / SPAWN
     # =======================
 
+    def _terminate_process(p: multiprocessing.Process):
+        try:
+            p.terminate()
+        except Exception:
+            pass
+        try:
+            p.join(timeout=0.5)
+        except Exception:
+            pass
+
     def reset_to_initial():
+        # ask all animals to die
         for q in list(prey_ctrl.values()):
             try:
                 q.put(("die",))
@@ -96,11 +106,9 @@ def run_env(shared_env, env_to_display, display_to_env,
             except Exception:
                 pass
 
+        # terminate everything (fast)
         for p in list(prey_procs.values()) + list(pred_procs.values()):
-            try:
-                p.terminate()
-            except Exception:
-                pass
+            _terminate_process(p)
 
         prey_procs.clear()
         pred_procs.clear()
@@ -112,13 +120,18 @@ def run_env(shared_env, env_to_display, display_to_env,
         reserved_preys.clear()
 
         shared_env.set_initial(grass=int(config.INITIAL_GRASS), drought=False)
-        _log(log_to_display, "🔄 Reset environment")
+        _log(log_to_display, "🔄 Reset environment (0 prey, 0 predator)")
 
         schedule_next_drought()
 
-    def spawn_prey(n):
+    def spawn_prey(n: int, origin: str = "UI"):
+        n = int(n)
+        if n <= 0:
+            return
+
         with shared_env.lock:
-            n = min(n, config.MAX_PREYS - shared_env.preys.value)
+            can_add = max(0, int(config.MAX_PREYS) - int(shared_env.preys.value))
+            n = min(n, can_add)
             if n <= 0:
                 return
             shared_env.preys.value += n
@@ -133,9 +146,16 @@ def run_env(shared_env, env_to_display, display_to_env,
             prey_procs[p.pid] = p
             prey_ctrl[p.pid] = q
 
-    def spawn_predator(n):
+        _log(log_to_display, f"🐇 +{n} prey ({origin})")
+
+    def spawn_predator(n: int, origin: str = "UI"):
+        n = int(n)
+        if n <= 0:
+            return
+
         with shared_env.lock:
-            n = min(n, config.MAX_PREDATORS - shared_env.predators.value)
+            can_add = max(0, int(config.MAX_PREDATORS) - int(shared_env.predators.value))
+            n = min(n, can_add)
             if n <= 0:
                 return
             shared_env.predators.value += n
@@ -150,13 +170,27 @@ def run_env(shared_env, env_to_display, display_to_env,
             pred_procs[p.pid] = p
             pred_ctrl[p.pid] = q
 
+        _log(log_to_display, f"🦁 +{n} predator ({origin})")
+
     def kill_one_active_prey():
-        for pid, active in prey_active.items():
-            if active and pid not in reserved_preys and pid in prey_ctrl:
-                reserved_preys.add(pid)
-                prey_active[pid] = False
+        # rule: only active preys can be predated
+        for pid, active in list(prey_active.items()):
+            if not active:
+                continue
+            if pid in reserved_preys:
+                continue
+            if pid not in prey_ctrl:
+                continue
+
+            reserved_preys.add(pid)
+            prey_active[pid] = False
+            try:
                 prey_ctrl[pid].put(("die",))
                 return pid
+            except Exception:
+                reserved_preys.discard(pid)
+                return None
+
         return None
 
     # =======================
@@ -164,10 +198,19 @@ def run_env(shared_env, env_to_display, display_to_env,
     # =======================
 
     def accept_clients():
+        # NOTE: thread must be daemon so it won't block shutdown
         while shared_env.running.value:
             try:
                 c, _ = server_socket.accept()
-                c.close()
+                try:
+                    # optional handshake content; not strictly required for your current design
+                    _ = c.recv(64)
+                except Exception:
+                    pass
+                try:
+                    c.close()
+                except Exception:
+                    pass
             except Exception:
                 break
 
@@ -176,7 +219,7 @@ def run_env(shared_env, env_to_display, display_to_env,
     # =======================
 
     try:
-        # Register POSIX signal handlers
+        # Register POSIX signal handlers (Linux/WSL)
         signal.signal(DROUGHT_SIGNAL, drought_signal_handler)
         signal.signal(signal.SIGALRM, alarm_handler)
 
@@ -184,7 +227,8 @@ def run_env(shared_env, env_to_display, display_to_env,
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind((config.ENV_HOST, config.ENV_PORT))
         server_socket.listen(10)
-        threading.Thread(target=accept_clients, daemon=False).start()
+
+        threading.Thread(target=accept_clients, daemon=True).start()
 
         reset_to_initial()
         tick = 0
@@ -198,7 +242,8 @@ def run_env(shared_env, env_to_display, display_to_env,
                 cmd = display_to_env.get_nowait()
 
                 if cmd.cmd == "quit":
-                    shared_env.running.value = False
+                    with shared_env.lock:
+                        shared_env.running.value = False
 
                 elif cmd.cmd == "reset":
                     reset_to_initial()
@@ -207,23 +252,33 @@ def run_env(shared_env, env_to_display, display_to_env,
                     os.kill(os.getpid(), DROUGHT_SIGNAL)
 
                 elif cmd.cmd == "add_prey":
-                    spawn_prey(int(cmd.args.get("value", 1)))
+                    spawn_prey(int(cmd.args.get("value", 1)), origin="UI")
 
                 elif cmd.cmd == "add_predator":
-                    spawn_predator(int(cmd.args.get("value", 1)))
+                    spawn_predator(int(cmd.args.get("value", 1)), origin="UI")
+
+                elif cmd.cmd == "set_grass":
+                    val = int(float(cmd.args.get("value", 0)))
+                    with shared_env.lock:
+                        shared_env.grass.value = max(0, min(val, int(config.MAX_GRASS)))
+                    _log(log_to_display, f"🌿 Grass set to {int(shared_env.grass.value)}")
 
             # ---- Telemetry ----
             while not energies_to_env.empty():
                 msg = energies_to_env.get_nowait()
+
                 if msg[0] == "prey":
                     _, pid, e, a = msg
-                    prey_energy[pid] = e
-                    prey_active[pid] = a
+                    prey_energy[pid] = float(e)
+                    prey_active[pid] = bool(a)
+
                 elif msg[0] == "predator":
-                    _, pid, e, _ = msg
-                    pred_energy[pid] = e
+                    _, pid, e, _a = msg
+                    pred_energy[pid] = float(e)
+
                 elif msg[0] == "dead":
                     _, kind, pid = msg
+
                     if kind == "prey":
                         reserved_preys.discard(pid)
                         prey_energy.pop(pid, None)
@@ -231,44 +286,92 @@ def run_env(shared_env, env_to_display, display_to_env,
                         prey_ctrl.pop(pid, None)
                         prey_procs.pop(pid, None)
                         with shared_env.lock:
-                            shared_env.preys.value -= 1
+                            shared_env.preys.value = max(0, int(shared_env.preys.value) - 1)
+                        _log(log_to_display, f"☠️ Prey {pid} dead")
+
                     elif kind == "predator":
                         pred_energy.pop(pid, None)
                         pred_ctrl.pop(pid, None)
                         pred_procs.pop(pid, None)
                         with shared_env.lock:
-                            shared_env.predators.value -= 1
+                            shared_env.predators.value = max(0, int(shared_env.predators.value) - 1)
+                        _log(log_to_display, f"☠️ Predator {pid} dead")
 
             # ---- Actions ----
             while not events_to_env.empty():
                 ev = events_to_env.get_nowait()
+
                 if ev[0] == "eat_grass":
                     _, pid, req = ev
+                    req = max(0, int(req))
                     with shared_env.lock:
-                        g = min(req, shared_env.grass.value)
-                        shared_env.grass.value -= g
-                    prey_ctrl[pid].put(("grass_grant", g))
+                        granted = min(req, int(shared_env.grass.value))
+                        shared_env.grass.value -= granted
+
+                    if pid in prey_ctrl:
+                        try:
+                            prey_ctrl[pid].put(("grass_grant", granted))
+                        except Exception:
+                            pass
+
+                    if granted > 0:
+                        _log(log_to_display, f"🐇 Prey {pid} eats {granted} grass")
+                    else:
+                        _log(log_to_display, f"🐇 Prey {pid} wants grass but none left")
+
                 elif ev[0] == "hunt":
-                    _, pid = ev
-                    success = kill_one_active_prey() is not None
-                    pred_ctrl[pid].put(("hunt_result", success))
+                    _, pred_pid = ev
+                    killed = kill_one_active_prey()
+                    success = killed is not None
+
+                    if pred_pid in pred_ctrl:
+                        try:
+                            pred_ctrl[pred_pid].put(("hunt_result", success))
+                        except Exception:
+                            pass
+
+                    if success:
+                        _log(log_to_display, f"🦁 Predator {pred_pid} eats prey {killed}")
+                    else:
+                        _log(log_to_display, f"🦁 Predator {pred_pid} hunts but fails (no active prey)")
+
+                elif ev[0] == "spawn_prey":
+                    _, n = ev
+                    n = int(n)
+                    if n > 0:
+                        spawn_prey(n, origin="reproduction")
+                        _log(log_to_display, f"🐇 Reproduction: +{n} prey")
+
+                elif ev[0] == "spawn_predator":
+                    _, n = ev
+                    n = int(n)
+                    if n > 0:
+                        spawn_predator(n, origin="reproduction")
+                        _log(log_to_display, f"🦁 Reproduction: +{n} predator")
 
             # ---- Grass growth ----
             with shared_env.lock:
                 if not shared_env.drought.value:
-                    shared_env.grass.value += config.GRASS_GROWTH_PER_TICK
+                    shared_env.grass.value += int(config.GRASS_GROWTH_PER_TICK)
                 else:
-                    shared_env.grass.value += int(
-                        config.GRASS_GROWTH_PER_TICK * config.DROUGHT_GRASS_FACTOR
-                    )
-                shared_env.grass.value = min(shared_env.grass.value, config.MAX_GRASS)
+                    shared_env.grass.value += int(config.GRASS_GROWTH_PER_TICK * config.DROUGHT_GRASS_FACTOR)
+
+                if shared_env.grass.value > int(config.MAX_GRASS):
+                    shared_env.grass.value = int(config.MAX_GRASS)
+                if shared_env.grass.value < 0:
+                    shared_env.grass.value = 0
+
+                predators_n = int(shared_env.predators.value)
+                preys_n = int(shared_env.preys.value)
+                grass_n = int(shared_env.grass.value)
+                drought_b = bool(shared_env.drought.value)
 
             snapshot = Snapshot(
                 tick=tick,
-                predators=shared_env.predators.value,
-                preys=shared_env.preys.value,
-                grass=shared_env.grass.value,
-                drought=shared_env.drought.value,
+                predators=predators_n,
+                preys=preys_n,
+                grass=grass_n,
+                drought=drought_b,
                 prey_energy_stats=_energy_stats(list(prey_energy.values())),
                 predator_energy_stats=_energy_stats(list(pred_energy.values())),
                 prey_probs=(config.PREY_EAT_PROB, config.PREY_REPRO_PROB),
@@ -280,7 +383,16 @@ def run_env(shared_env, env_to_display, display_to_env,
             time.sleep(config.TICK_DURATION)
 
     finally:
-        shared_env.running.value = False
-        if server_socket:
-            server_socket.close()
+        try:
+            with shared_env.lock:
+                shared_env.running.value = False
+        except Exception:
+            pass
+
+        try:
+            if server_socket:
+                server_socket.close()
+        except Exception:
+            pass
+
         _log(log_to_display, "🛑 ENV stopped")
