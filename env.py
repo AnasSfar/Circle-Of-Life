@@ -283,6 +283,8 @@ def run_env(shared_state, env_to_display, display_to_env, energies_to_env, event
                 drought=bool(shared_state["drought"]),
                 prey_energy_stats=_energy_stats(list(prey_energy.values())),
                 predator_energy_stats=_energy_stats(list(pred_energy.values())),
+                prey_probs=(config.PREY_EAT_PROB, config.PREY_REPRO_PROB),
+                pred_probs=(config.PRED_HUNT_PROB, config.PRED_REPRO_PROB),
             )
             env_to_display.put(snapshot)
 

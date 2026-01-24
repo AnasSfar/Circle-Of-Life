@@ -15,6 +15,8 @@ class Snapshot:
     drought: bool
     prey_energy_stats: Tuple[float, float, float]
     predator_energy_stats: Tuple[float, float, float]
+    prey_probs: tuple = (0.0, 0.0)
+    pred_probs: tuple = (0.0, 0.0)
 
 
 @dataclass

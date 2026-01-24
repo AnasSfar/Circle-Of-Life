@@ -1,4 +1,5 @@
-# predator.py (final) - Option A: 3 tentatives max + probabilités augmentées
+# predator.py (final corrigé) - Option A: 3 tentatives max
+# Tentative = essai réel (on décrémente à chaque essai, succès ou échec)
 
 import time
 import random
@@ -11,13 +12,12 @@ def run_predator(energies_to_env, events_to_env, ctrl_q):
     my_energy = config.PREDATOR_INITIAL_ENERGY
     active = False
 
-    # 3 tentatives max (définitif après)
     hunt_tries_left = 3
     repro_tries_left = 3
 
-    # Probabilités (Option A)
-    HUNT_PROB = 0.6
-    REPRO_PROB = 0.2
+    # Probabilités
+    HUNT_PROB = config.PRED_HUNT_PROB
+    REPRO_PROB = config.PRED_REPRO_PROB
 
     while my_energy > 0:
         time.sleep(config.TICK_DURATION)
@@ -44,20 +44,18 @@ def run_predator(energies_to_env, events_to_env, ctrl_q):
         elif my_energy > config.H_ENERGY * 1.5:
             active = False
 
-        # Hunt: max 3 attempts total (only while active)
+        # Hunt: max 3 tentatives (tentative consommée à chaque essai)
         if active and hunt_tries_left > 0:
+            hunt_tries_left -= 1
             if random.random() < HUNT_PROB:
                 events_to_env.put(("hunt", pid))
-            else:
-                hunt_tries_left -= 1
 
-        # Reproduction: max 3 attempts total (only if energy > R)
+        # Reproduction: max 3 tentatives (tentative consommée à chaque essai)
         if my_energy > config.R_ENERGY and repro_tries_left > 0:
+            repro_tries_left -= 1
             if random.random() < REPRO_PROB:
                 events_to_env.put(("spawn_predator", 1))
                 my_energy -= 20
-            else:
-                repro_tries_left -= 1
 
         energies_to_env.put(("predator", pid, float(my_energy), bool(active)))
 
