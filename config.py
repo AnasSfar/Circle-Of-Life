@@ -1,40 +1,50 @@
 # config.py
 
-#fixed parameters 
-TICK_DURATION = 2.0  # seconds
-    #limit values
-H_ENERGY = 30
-R_ENERGY = 60
-    #probs :
-PREY_EAT_PROB = 0.8
-PREY_REPRO_PROB = 0.5
-PRED_HUNT_PROB = 0.8
-PRED_REPRO_PROB = 0.5
+# Simulation timing
+TICK_DURATION = 0.2  # seconds
 
-#initial configuration parameters
-INITIAL_PREDATORS = 0
-INITIAL_PREYS = 0
-INITIAL_GRASS = 1000
-PREDATOR_INITIAL_ENERGY = 50
-PREY_INITIAL_ENERGY = 50
+# Environment
+ENV_HOST = "127.0.0.1"
+ENV_PORT = 8000
 
-#changes
-PREDATOR_ENERGY_DECAY = 1
-PREY_ENERGY_DECAY = 2
+# Limits
+MAX_PREYS = 200
+MAX_PREDATORS = 80
+MAX_GRASS = 2000
+
+# Initial state
+INITIAL_GRASS = 200
+
+# Energy thresholds
+H_ENERGY = 30         # hungry/active threshold
+R_ENERGY = 60         # reproduction threshold
+
+# Energy dynamics
+PREY_INITIAL_ENERGY = 40
+PREDATOR_INITIAL_ENERGY = 40
+
+PREY_ENERGY_DECAY = 1
+PREDATOR_ENERGY_DECAY = 2
+
+# Food gains
+PREY_GRASS_GAIN_PER_UNIT = 1       # 1 grass -> +1 energy
 PREDATOR_EAT_GAIN = 30
 
-MAX_PREDATORS = 50
-MAX_PREYS = 200
-MAX_GRASS = 1000
+# Grass dynamics
+GRASS_GROWTH_PER_TICK = 5
+DROUGHT_GRASS_FACTOR = 0.2         # during drought, growth is reduced
 
-GRASS_GROWTH_PER_TICK = 10
-DROUGHT_GRASS_FACTOR = 0.2
+# Decision probabilities
+PREY_EAT_PROB = 0.8
+PREY_REPRO_PROB = 0.2
 
-ENV_DISPLAY_QUEUE_MAXSIZE = 100
+PRED_HUNT_PROB = 0.8
+PRED_REPRO_PROB = 0.2
 
-ENV_HOST = "127.0.0.1"
-ENV_PORT = 50000
+# Prey eating request bounds
+PREY_MIN_EAT = 1
+PREY_MAX_EAT_FACTOR = 2   # requested max = int(R_ENERGY * factor)
 
-# pour la proie: 1 herbe = 1 énergie
-PREY_MIN_EAT = 30
-PREY_MAX_EAT_FACTOR = 1.3  # max_eat = int(R * factor)
+# Drought scheduling (env self-timer)
+ENABLE_DROUGHT_TIMER = False
+DROUGHT_TIMER_EVERY_SEC = 15

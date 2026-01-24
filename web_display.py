@@ -1,8 +1,7 @@
 # web_display.py
-# Simple local HTML dashboard + JSON API for the Circle of Life simulation (LOCAL)
-#  - GET  /           -> HTML page
-#  - GET  /api/state  -> latest snapshot + logs as JSON
-#  - POST /api/cmd    -> send command to env via display_to_env queue
+# Display process:
+#  - communicates with env ONLY through message queues (display_to_env, env_to_display, log_to_display)
+#  - does NOT access shared_env (spec: shared memory for predator/prey only)
 
 import json
 import time
@@ -12,253 +11,147 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from ipc import DisplayCommand
 
 
-def run_web_display(shared_state, env_to_display, display_to_env, log_to_display, host="127.0.0.1", port=8000):
+def run_web_display(env_to_display, display_to_env, log_to_display, host="127.0.0.1", port=8000):
     latest = {"ok": False, "reason": "no snapshot yet"}
     latest_lock = threading.Lock()
-
-    def _extract_probs(obj, kind: str):
-        if kind == "prey":
-            if isinstance(obj, (tuple, list)) and len(obj) >= 2:
-                return {"eat": float(obj[0]), "repro": float(obj[1])}
-            if isinstance(obj, dict):
-                return {"eat": float(obj.get("eat", 0.0)), "repro": float(obj.get("repro", 0.0))}
-            return {"eat": 0.0, "repro": 0.0}
-        # predator
-        if isinstance(obj, (tuple, list)) and len(obj) >= 2:
-            return {"hunt": float(obj[0]), "repro": float(obj[1])}
-        if isinstance(obj, dict):
-            return {"hunt": float(obj.get("hunt", 0.0)), "repro": float(obj.get("repro", 0.0))}
-        return {"hunt": 0.0, "repro": 0.0}
-
-    def snapshot_loop():
-        nonlocal latest
-        while shared_state.get("running", False):
-            try:
-                while True:
-                    s = env_to_display.get_nowait()
-
-                    prey_min, prey_avg, prey_max = getattr(s, "prey_energy_stats", (0.0, 0.0, 0.0))
-                    pred_min, pred_avg, pred_max = getattr(s, "predator_energy_stats", (0.0, 0.0, 0.0))
-
-                    prey_probs = _extract_probs(getattr(s, "prey_probs", None), "prey")
-                    pred_probs = _extract_probs(getattr(s, "pred_probs", None), "pred")
-
-                    payload = {
-                        "ok": True,
-                        "tick": int(getattr(s, "tick", 0)),
-                        "predators": int(getattr(s, "predators", 0)),
-                        "preys": int(getattr(s, "preys", 0)),
-                        "grass": int(getattr(s, "grass", 0)),
-                        "drought": bool(getattr(s, "drought", False)),
-                        "prey_energy": {"min": float(prey_min), "avg": float(prey_avg), "max": float(prey_max)},
-                        "pred_energy": {"min": float(pred_min), "avg": float(pred_avg), "max": float(pred_max)},
-                        "prey_probs": prey_probs,
-                        "pred_probs": pred_probs,
-                    }
-
-                    with latest_lock:
-                        latest = payload
-            except Exception:
-                pass
-            time.sleep(0.05)
-
-    threading.Thread(target=snapshot_loop, daemon=True).start()
 
     logs = []  # newest first
     logs_lock = threading.Lock()
 
-    def log_loop():
-        nonlocal logs
-        while shared_state.get("running", False):
+    def snapshot_loop():
+        nonlocal latest
+        while True:
             try:
-                while True:
-                    line = log_to_display.get_nowait()
-                    with logs_lock:
-                        logs.insert(0, str(line))
-                        if len(logs) > 200:
-                            logs = logs[:200]
+                s = env_to_display.get()
+                payload = {
+                    "ok": True,
+                    "tick": int(getattr(s, "tick", 0)),
+                    "predators": int(getattr(s, "predators", 0)),
+                    "preys": int(getattr(s, "preys", 0)),
+                    "grass": int(getattr(s, "grass", 0)),
+                    "drought": bool(getattr(s, "drought", False)),
+                    "prey_energy": {
+                        "min": float(getattr(s, "prey_energy_stats", (0, 0, 0))[0]),
+                        "avg": float(getattr(s, "prey_energy_stats", (0, 0, 0))[1]),
+                        "max": float(getattr(s, "prey_energy_stats", (0, 0, 0))[2]),
+                    },
+                    "pred_energy": {
+                        "min": float(getattr(s, "predator_energy_stats", (0, 0, 0))[0]),
+                        "avg": float(getattr(s, "predator_energy_stats", (0, 0, 0))[1]),
+                        "max": float(getattr(s, "predator_energy_stats", (0, 0, 0))[2]),
+                    },
+                    "prey_probs": {"eat": float(getattr(s, "prey_probs", (0, 0))[0]), "repro": float(getattr(s, "prey_probs", (0, 0))[1])},
+                    "pred_probs": {"hunt": float(getattr(s, "pred_probs", (0, 0))[0]), "repro": float(getattr(s, "pred_probs", (0, 0))[1])},
+                }
+                with latest_lock:
+                    latest = payload
             except Exception:
                 pass
-            time.sleep(0.05)
 
+    def log_loop():
+        nonlocal logs
+        while True:
+            try:
+                line = log_to_display.get()
+                with logs_lock:
+                    logs.insert(0, str(line))
+                    if len(logs) > 200:
+                        logs = logs[:200]
+            except Exception:
+                pass
+
+    threading.Thread(target=snapshot_loop, daemon=True).start()
     threading.Thread(target=log_loop, daemon=True).start()
 
     INDEX_HTML = """<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Circle of Life (Local)</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Circle of Life</title>
 <style>
-  :root{
-    --bg1:#06140e;   
-    --bg2:#0b2a1d;     
-    --bg3:#14532d;     
-    --card: rgba(255,255,255,0.08);
-    --border: rgba(255,255,255,0.18);
-    --text: #f1f5f9;
-    --muted: rgba(241,245,249,0.7);
-  }
-
-  body{
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 20px;
-    min-height: 100vh;
-    background: linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3));
-    color: var(--text);
-  }
-
-  h1, h3{ margin-top: 0; }
-  .small{ color: var(--muted); font-size: 12px; }
-
-  .grid{
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin: 15px 0;
-  }
-
-  .box{
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px;
-  }
-
-  .label{
-    font-size: 12px;
-    color: var(--muted);
-  }
-
-  .value{
-    font-size: 20px;
-    font-weight: bold;
-    margin-top: 4px;
-  }
-
-  .row{
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-    margin: 10px 0;
-  }
-
-  button, input{
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: rgba(255,255,255,0.08);
-    color: var(--text);
-    outline: none;
-  }
-
-  input{
-    width: 120px;
-  }
-
-  button{
-    cursor: pointer;
-    font-weight: bold;
-  }
-
-  button:hover{
-    background: rgba(255,255,255,0.18);
-  }
-
-  button.primary{
-    border-color: rgba(52,211,153,0.6);
-  }
-
-  button.warn{
-    border-color: rgba(245,158,11,0.7);
-  }
-
-  button.danger{
-    border-color: rgba(239,68,68,0.7);
-  }
-
-  #log{
-    white-space: pre-wrap;
-    background: rgba(0,0,0,0.25);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px;
-    max-height: 260px;
-    overflow: auto;
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--muted);
-  }
-
-  @media (max-width: 900px){
-    .grid{
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
+:root{
+  --bg1:#06140e;
+  --bg2:#0b2a1d;
+  --bg3:#14532d;
+  --card: rgba(255,255,255,0.08);
+  --border: rgba(255,255,255,0.18);
+  --text: #ecfdf5;
+  --muted: rgba(236,253,245,0.7);
+}
+body{
+  font-family: Arial, sans-serif;
+  margin:0;
+  padding: 18px;
+  min-height:100vh;
+  background: linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3));
+  color: var(--text);
+}
+h1{margin:0 0 8px;}
+.small{color:var(--muted); font-size:12px;}
+.grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:14px 0;}
+.box{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px;}
+.label{font-size:12px; color:var(--muted);}
+.value{font-size:20px; font-weight:bold; margin-top:4px;}
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0;}
+button,input{padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:rgba(255,255,255,0.08); color:var(--text);}
+button{cursor:pointer; font-weight:bold;}
+button:hover{background:rgba(255,255,255,0.18);}
+button.primary{border-color: rgba(52,211,153,0.6);}
+button.warn{border-color: rgba(245,158,11,0.7);}
+button.danger{border-color: rgba(239,68,68,0.7);}
+#log{
+  white-space:pre-wrap;
+  background:rgba(0,0,0,0.25);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:10px;
+  max-height:260px;
+  overflow:auto;
+  font-family: monospace;
+  font-size:12px;
+  color: var(--muted);
+}
+@media(max-width:900px){ .grid{grid-template-columns:repeat(2,1fr);} }
 </style>
-
 </head>
 <body>
   <h1>Circle of Life (Live)</h1>
-  <div class="small">Rafraichissement toutes les 200 ms.</div>
+  <div class="small">Refresh 200 ms. Display talks to env via queue only.</div>
 
   <div class="grid">
     <div class="box">
       <div class="label">Tick</div>
       <div class="value" id="tick">-</div>
-      <div class="small">Etat: <span id="mode">-</span></div>
+      <div class="small">Mode: <span id="mode">-</span></div>
     </div>
-
     <div class="box">
-      <div class="label">Herbe</div>
+      <div class="label">Grass</div>
       <div class="value" id="grass">-</div>
     </div>
-
     <div class="box">
-      <div class="label">Proies</div>
+      <div class="label">Preys</div>
       <div class="value" id="preys">-</div>
-      <div class="small">Energie (min/avg/max): <span id="preyE">-</span></div>
-      <div class="small">Manger: <span id="preyEatP">-</span>% | Repro: <span id="preyRepP">-</span>%</div>
+      <div class="small">Energy (min/avg/max): <span id="preyE">-</span></div>
+      <div class="small">Eat: <span id="preyEatP">-</span>% | Repro: <span id="preyRepP">-</span>%</div>
     </div>
-
     <div class="box">
-      <div class="label">Predateurs</div>
+      <div class="label">Predators</div>
       <div class="value" id="preds">-</div>
-      <div class="small">Energie (min/avg/max): <span id="predE">-</span></div>
-      <div class="small">Chasse: <span id="predHuntP">-</span>% | Repro: <span id="predRepP">-</span>%</div>
+      <div class="small">Energy (min/avg/max): <span id="predE">-</span></div>
+      <div class="small">Hunt: <span id="predHuntP">-</span>% | Repro: <span id="predRepP">-</span>%</div>
     </div>
   </div>
 
-  <h3>Controles</h3>
+  <h3>Controls</h3>
   <div class="row">
-    <button class="warn" onclick="sendCmd('drought_on')">Secheresse ON</button>
-    <button class="primary" onclick="sendCmd('drought_off')">Normal</button>
-    <span class="small">Herbe:</span>
-    <input id="grassInput" type="number" value="100" min="0" />
-    <button class="primary" onclick="setGrass()">Appliquer</button>
-  </div>
-
-  <div class="row">
-    <button class="primary" onclick="sendCmd('add_prey',{value:1})">+1 proie</button>
-    <span class="small">Ajouter X:</span>
-    <input id="preyAddInput" type="number" value="1" min="1" />
-    <button class="primary" onclick="addPreys()">Ajouter</button>
-
-    <span style="width:20px;"></span>
-
-    <button class="primary" onclick="sendCmd('add_predator',{value:1})">+1 predateur</button>
-    <span class="small">Ajouter X:</span>
-    <input id="predAddInput" type="number" value="1" min="1" />
-    <button class="primary" onclick="addPreds()">Ajouter</button>
-  </div>
-
-  <div class="row">
+    <button class="warn" onclick="sendCmd('drought_toggle')">Toggle drought (signal)</button>
+    <button class="primary" onclick="sendCmd('add_prey',{value:1})">+1 prey</button>
+    <button class="primary" onclick="sendCmd('add_predator',{value:1})">+1 predator</button>
     <button class="danger" onclick="sendCmd('reset')">Reset</button>
   </div>
 
-  <h3>Journal</h3>
+  <h3>Logs</h3>
   <div id="log"></div>
 
 <script>
@@ -266,40 +159,15 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
 
 const logEl = document.getElementById('log');
 
-function pushLocalLog(line){
-  const ts = new Date().toLocaleTimeString('fr-FR', {hour12:false});
-  logEl.textContent = `[${ts}] ${line}` + String.fromCharCode(10) + (logEl.textContent || '');
-}
-
 async function sendCmd(cmd, args){
   try{
     const res = await fetch('/api/cmd', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({cmd, args: args || {}})
+      body: JSON.stringify({cmd: cmd, args: args || {}})
     });
-    const data = await res.json();
-    if(!data.ok){
-      pushLocalLog(`Erreur cmd: ${data.error || 'unknown'}`);
-    }
-  }catch(e){
-    pushLocalLog(`Erreur reseau (cmd): ${e}`);
-  }
-}
-
-function setGrass(){
-  const v = parseInt(document.getElementById('grassInput').value, 10);
-  if(Number.isFinite(v) && v >= 0) sendCmd('set_grass', {value:v});
-}
-
-function addPreys(){
-  const v = parseInt(document.getElementById('preyAddInput').value, 10);
-  if(Number.isFinite(v) && v > 0) sendCmd('add_prey', {value:v});
-}
-
-function addPreds(){
-  const v = parseInt(document.getElementById('predAddInput').value, 10);
-  if(Number.isFinite(v) && v > 0) sendCmd('add_predator', {value:v});
+    await res.json();
+  }catch(e){}
 }
 
 async function refresh(){
@@ -308,16 +176,15 @@ async function refresh(){
     const s = await res.json();
 
     if(!s || !s.ok){
-      document.getElementById('mode').textContent = 'en attente...';
+      document.getElementById('mode').textContent = 'waiting...';
       return;
     }
-
     document.getElementById('tick').textContent = s.tick;
     document.getElementById('grass').textContent = s.grass;
     document.getElementById('preys').textContent = s.preys;
     document.getElementById('preds').textContent = s.predators;
 
-    document.getElementById('mode').textContent = s.drought ? 'SECHERESSE' : 'Normal';
+    document.getElementById('mode').textContent = s.drought ? 'DROUGHT' : 'NORMAL';
 
     const pe = s.prey_energy || {min:0, avg:0, max:0};
     const pr = s.pred_energy || {min:0, avg:0, max:0};
@@ -335,30 +202,18 @@ async function refresh(){
     document.getElementById('predHuntP').textContent = Math.round(Number(dp.hunt) * 100);
     document.getElementById('predRepP').textContent = Math.round(Number(dp.repro) * 100);
 
-    if (Array.isArray(s.logs)) {
-      logEl.textContent = s.logs.join(String.fromCharCode(10));
-    }
-  }catch(e){
-    pushLocalLog(`Erreur refresh: ${e}`);
-  }
+    if (Array.isArray(s.logs)) logEl.textContent = s.logs.join("\\n");
+  }catch(e){}
 }
 
 setInterval(refresh, 200);
 refresh();
 </script>
-
 </body>
 </html>
 """
 
-    # Remove BOM / invisible chars that can break JS parsing (your original error)
-    INDEX_HTML = (
-        INDEX_HTML
-        .replace("\ufeff", "")
-        .replace("\u200b", "")
-        .replace("\u200c", "")
-        .replace("\u200d", "")
-    )
+    INDEX_HTML = INDEX_HTML.replace("\ufeff", "")
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code, body, content_type="application/json"):
@@ -397,7 +252,6 @@ refresh();
             if self.path != "/api/cmd":
                 self._send(404, {"ok": False, "error": "not found"})
                 return
-
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 raw = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
@@ -406,7 +260,6 @@ refresh();
 
                 cmd = data.get("cmd")
                 args = data.get("args", {}) or {}
-
                 if not isinstance(cmd, str):
                     self._send(400, {"ok": False, "error": "cmd must be a string"})
                     return
