@@ -261,8 +261,8 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
         <div class="big">🐇 Proies: <span id="preys">-</span></div>
         <div class="muted">Énergie (min/avg/max): <span id="preyE">-</span></div>
         <div class="probas">
-          <div>Manger: <b><span id="preyEatP">70</span>%</b></div>
-          <div>Reproduction: <b><span id="preyRepP">25</span>%</b></div>
+          <div>Manger: <b><span id="preyEatP">80</span>%</b></div>
+          <div>Reproduction: <b><span id="preyRepP">50</span>%</b></div>
         </div>
       </div>
 
@@ -270,8 +270,8 @@ def run_web_display(shared_state, env_to_display, display_to_env, log_to_display
         <div class="big">🦁 Prédateurs: <span id="preds">-</span></div>
         <div class="muted">Énergie (min/avg/max): <span id="predE">-</span></div>
         <div class="probas">
-          <div>Chasse: <b><span id="predHuntP">60</span>%</b></div>
-          <div>Reproduction: <b><span id="predRepP">20</span>%</b></div>
+          <div>Chasse: <b><span id="predHuntP">80</span>%</b></div>
+          <div>Reproduction: <b><span id="predRepP">50</span>%</b></div>
         </div>
       </div>
     </div>
