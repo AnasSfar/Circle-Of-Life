@@ -40,10 +40,10 @@ DROUGHT_GRASS_FACTOR = 0.2         # during drought, growth is reduced
 
 # Decision probabilities
 PREY_EAT_PROB = 0.8
-PREY_REPRO_PROB = 0.2
+PREY_REPRO_PROB = 0.5
 
 PRED_HUNT_PROB = 0.6
-PRED_REPRO_PROB = 0.2
+PRED_REPRO_PROB = 0.5
 
 # Prey eating request bounds
 PREY_MIN_EAT = 1
