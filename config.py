@@ -38,7 +38,7 @@ PREDATOR_EAT_GAIN = 40
 
 # Grass dynamics
 GRASS_GROWTH_PER_TICK = 50
-DROUGHT_GRASS_FACTOR = 0.2         # during drought, growth is reduced
+DROUGHT_GRASS_FACTOR = 0.1         # during drought, growth is reduced
 
 # Decision probabilities
 PREY_EAT_PROB = 0.8
