@@ -11,8 +11,6 @@ import config
 from shared_env import SharedEnv
 from env import run_env
 from web_display import run_web_display
-from ipc import create_shared_state, create_queues
-
 
 
 def main():
@@ -38,12 +36,11 @@ def main():
     # DISPLAY (web)
     disp_p = multiprocessing.Process(
         target=run_web_display,
-        args=(env_to_display, display_to_env, log_to_display, "127.0.0.1", 8000),
+        args=(env_to_display, display_to_env, log_to_display, "127.0.0.1", config.WEB_PORT),
         daemon=False,
     )
-    disp_p.start()
 
-    print("Open: http://127.0.0.1:8000")
+    print(f"Open: http://127.0.0.1:{config.WEB_PORT}")
 
     try:
         while env_p.is_alive() and disp_p.is_alive():

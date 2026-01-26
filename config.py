@@ -5,7 +5,9 @@ TICK_DURATION = 2  # seconds
 
 # Environment
 ENV_HOST = "127.0.0.1"
-ENV_PORT = 9000
+ENV_PORT = 5001
+WEB_PORT = 8000
+
 
 # Limits
 MAX_PREYS = 200
