@@ -11,6 +11,8 @@ import config
 from shared_env import SharedEnv
 from env import run_env
 from web_display import run_web_display
+from ipc import create_shared_state, create_queues
+
 
 
 def main():
