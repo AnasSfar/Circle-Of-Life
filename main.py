@@ -8,8 +8,6 @@ from shared_env import SharedEnv
 from env import run_env
 from web_display import run_web_display
 
-print("MAIN: start")
-
 def main():
     multiprocessing.set_start_method("spawn", force=True)
 
