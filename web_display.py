@@ -6,8 +6,7 @@
 import json
 import time
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipc import DisplayCommand
 
 
@@ -272,7 +271,7 @@ refresh();
             except Exception as e:
                 self._send(500, {"ok": False, "error": str(e)})
 
-    server = HTTPServer((host, port), Handler)
+    server = ThreadingHTTPServer((host, port), Handler)
     print(f"WEB: http://{host}:{port}")
     try:
         server.serve_forever()
