@@ -4,7 +4,7 @@
 import random
 
 
-TICK_DURATION = 2  # seconds
+TICK_DURATION = 1  # second
 
 # Environment
 ENV_HOST = "127.0.0.1"
