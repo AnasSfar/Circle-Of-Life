@@ -183,7 +183,6 @@ def run_env(shared_env, env_to_display, display_to_env,
             try:
                 c, _ = server_socket.accept()
                 try:
-                    # optional handshake content; not strictly required for your current design
                     _ = c.recv(64)
                 except Exception:
                     pass

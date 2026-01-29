@@ -21,7 +21,7 @@ MAX_GRASS = 5000
 INITIAL_GRASS = 2000
 
 # Energy thresholds
-H_ENERGY = 30         # hungry/active threshold
+H_ENERGY = 30         # active threshold
 R_ENERGY = 60         # reproduction threshold
 
 # Energy dynamics
@@ -36,8 +36,9 @@ PREY_REPRO_COST = 15
 PRED_REPRO_COST = 20
 
 # Food gains
-PREY_GRASS_GAIN_PER_UNIT = 0.25       # 0.25 energy per grass unit
+PREY_GRASS_GAIN_PER_UNIT = 1       # 1 energy per grass unit
 PREDATOR_EAT_GAIN = 40
+PREY_MIN_EAT = 1
 
 # Grass dynamics
 GRASS_GROWTH_PER_TICK = 50
@@ -49,16 +50,3 @@ PREY_REPRO_PROB = 0.5
 
 PRED_HUNT_PROB = 0.6
 PRED_REPRO_PROB = 0.5
-
-# Prey eating request bounds
-PREY_MIN_EAT = 1
-PREY_MAX_EAT_FACTOR = 2   # requested max = int(R_ENERGY * factor)
-
-# Drought scheduling (env self-timer)
-ENABLE_DROUGHT_TIMER = False
-DROUGHT_TIMER_EVERY_SEC = 15
-
-DROUGHT_MIN_SECONDS = 8
-DROUGHT_MAX_SECONDS = 18
-NORMAL_MIN_SECONDS = 10
-NORMAL_MAX_SECONDS = 25

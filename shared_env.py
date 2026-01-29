@@ -8,7 +8,7 @@ class SharedEnv:
     """
     Shared state stored in shared memory primitives (Value) + a Lock.
     Predator/Prey should READ these values.
-    Only env should WRITE them (rule of thumb).
+    Only env should WRITE them.
     """
     def __init__(self):
         self.lock = multiprocessing.Lock()
