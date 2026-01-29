@@ -24,7 +24,7 @@ class SharedEnv:
     def set_initial(self, grass: int, drought: bool = False):
         with self.lock:
             self.tick.value = 0
-            self.grass.value = int(grass)
+            self.grass.value = 0
             self.drought.value = bool(drought)
             self.preys.value = 0
             self.predators.value = 0
