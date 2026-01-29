@@ -1,6 +1,9 @@
 # config.py
 
 # Simulation timing
+import random
+
+
 TICK_DURATION = 2  # seconds
 
 # Environment
@@ -22,8 +25,8 @@ H_ENERGY = 30         # hungry/active threshold
 R_ENERGY = 60         # reproduction threshold
 
 # Energy dynamics
-PREY_INITIAL_ENERGY = 40
-PREDATOR_INITIAL_ENERGY = 40
+PREY_INITIAL_ENERGY = random.randint(30, 60)
+PREDATOR_INITIAL_ENERGY = random.randint(30, 60)
 
 PREY_ENERGY_DECAY = 2
 PREDATOR_ENERGY_DECAY = 1
