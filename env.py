@@ -59,7 +59,7 @@ def run_env(shared_env, env_to_display, display_to_env,
         _log(log_to_display, f"🌵 Drought toggled by SIGNAL (drought={now})")
 
     def alarm_handler(signum, frame):
-        # SIGALRM -> trigger SIGUSR1 (spec demo: drought notified by a signal)
+        # SIGALRM -> trigger SIGUSR1
         os.kill(os.getpid(), DROUGHT_SIGNAL)
 
     # =======================
@@ -179,7 +179,6 @@ def run_env(shared_env, env_to_display, display_to_env,
     # =======================
 
     def accept_clients():
-        # NOTE: thread must be daemon so it won't block shutdown
         while shared_env.running.value:
             try:
                 c, _ = server_socket.accept()
