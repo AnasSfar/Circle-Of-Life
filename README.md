@@ -41,9 +41,10 @@ Le passage actif ↔ passif dépend du seuil d’énergie H = 30.
 * L’herbe repousse automatiquement à chaque tick
 * Lors d’une **sécheresse** :
 
-  * la croissance est stoppée
   * l’événement est déclenché par **signal**
   * géré exclusivement par `env`
+  * le nombre d'herbe est divisé par 2
+  * la croissance de l'herbe ralentit (10 herbes par tick)
 
 
 ## Configurations probabilistes
@@ -53,7 +54,7 @@ Le passage actif ↔ passif dépend du seuil d’énergie H = 30.
 Les interactions dans notre projet sont **probabilistes** :
 
 * Une **proie active** ne mange pas systématiquement de l’herbe (Une probabilité de 80%)
-* Un **prédateur actif** ne réussit pas systématiquement à manger une proie (Une probabilité de 60%)
+* Un **prédateur actif** ne réussit pas systématiquement à manger une proie (Une probabilité de 60%). Les prédateurs actifs ne peuvent manger que des proies actives.
 * Chaque tentative est soumise à une **probabilité de succès** différente du tick précédent. 
 
 Ces probabilités permettent :
@@ -79,7 +80,7 @@ La reproduction est également **non déterministe** :
 * Même si ces conditions sont réunies, la reproduction :
 
   * **n’est pas garantie**
-  * dépend d’une **probabilité de reproduction**
+  * dépend d’une **probabilité de reproduction** (50%)
 
 Ce choix permet :
 
