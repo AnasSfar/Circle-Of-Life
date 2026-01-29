@@ -234,7 +234,7 @@ refresh();
 
         def do_GET(self):
             if self.path == "/" or self.path.startswith("/index.html"):
-                self._send(200, INDEX_HTML, content_type="text/html")
+                self._send(100, INDEX_HTML, content_type="text/html")
                 return
 
             if self.path.startswith("/api/state"):
@@ -242,7 +242,7 @@ refresh();
                     payload = dict(latest)
                 with logs_lock:
                     payload["logs"] = list(logs)
-                self._send(200, payload)
+                self._send(100, payload)
                 return
 
             self._send(404, {"ok": False, "error": "not found"})
