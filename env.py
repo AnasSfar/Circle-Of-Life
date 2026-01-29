@@ -1,5 +1,4 @@
-# env.py — UNIX-LIKE FINAL VERSION (with logs + reproduction + robust join thread)
-# Requires: Linux / WSL / VM (POSIX signals)
+# env.py
 
 import os
 import time
@@ -59,25 +58,9 @@ def run_env(shared_env, env_to_display, display_to_env,
                 shared_env.grass.value //= 2
         _log(log_to_display, f"🌵 Drought toggled by SIGNAL (drought={now})")
 
-    def schedule_next_drought():
-        if not config.ENABLE_DROUGHT_TIMER:
-            return
-
-        with shared_env.lock:
-            is_drought = bool(shared_env.drought.value)
-
-        if is_drought:
-            dt = random.randint(config.DROUGHT_MIN_SECONDS, config.DROUGHT_MAX_SECONDS)
-        else:
-            dt = random.randint(config.NORMAL_MIN_SECONDS, config.NORMAL_MAX_SECONDS)
-
-        signal.setitimer(signal.ITIMER_REAL, float(dt))
-        _log(log_to_display, f"[DROUGHT] next signal in {dt}s")
-
     def alarm_handler(signum, frame):
         # SIGALRM -> trigger SIGUSR1 (spec demo: drought notified by a signal)
         os.kill(os.getpid(), DROUGHT_SIGNAL)
-        schedule_next_drought()
 
     # =======================
     # RESET / SPAWN
@@ -121,8 +104,6 @@ def run_env(shared_env, env_to_display, display_to_env,
 
         shared_env.set_initial(grass=int(config.INITIAL_GRASS), drought=False)
         _log(log_to_display, "🔄 Reset environment (0 prey, 0 predator)")
-
-        schedule_next_drought()
 
     def spawn_prey(n: int, origin: str = "UI"):
         n = int(n)
