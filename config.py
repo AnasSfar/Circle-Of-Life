@@ -33,7 +33,7 @@ PREY_REPRO_COST = 15
 PRED_REPRO_COST = 20
 
 # Food gains
-PREY_GRASS_GAIN_PER_UNIT = 0.25       # 1 grass -> +1 energy
+PREY_GRASS_GAIN_PER_UNIT = 0.25       # 0.25 energy per grass unit
 PREDATOR_EAT_GAIN = 40
 
 # Grass dynamics
