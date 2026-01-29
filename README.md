@@ -18,8 +18,8 @@ Chaque individu est simulé par un **processus indépendant**. Les interactions 
 
 ## Énergie et états
 
-* Chaque individu possède une **énergie**
-* L’énergie diminue à chaque tick
+* Chaque individu possède une **énergie** initiale qui varie (de manière probabiliste) entre 30 et 60.
+* L’énergie diminue à chaque tick de manière constante (l'énergie des proies diminue deux fois plus rapidement que celle des prédateurs)
 * Deux états possibles :
 
   * **Actif** : l’individu peut tenter de se nourrir
