@@ -272,7 +272,6 @@ refresh();
                 self._send(500, {"ok": False, "error": str(e)})
 
     server = ThreadingHTTPServer((host, port), Handler)
-    print(f"WEB: http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
