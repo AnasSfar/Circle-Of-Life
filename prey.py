@@ -37,31 +37,28 @@ def run_prey(shared_env, energies_to_env, events_to_env, ctrl_q):
                     return
                 elif msg[0] == "grass_grant":
                     granted = int(msg[1])
-                    my_energy += granted * float(getattr(config, "PREY_GRASS_GAIN_PER_UNIT", 1))
+                    my_energy += granted * float(config.PREY_GRASS_GAIN_PER_UNIT)
         except Exception:
             pass
 
         # decay
         my_energy -= float(config.PREY_ENERGY_DECAY)
 
-        # active/passive with hysteresis
+        # active/passive
         if my_energy < config.H_ENERGY:
             active = True
-        elif my_energy > config.H_ENERGY * 1.5:
+        elif my_energy > config.H_ENERGY:
             active = False
 
         # Eat: every tick if active (probabilistic)
         if active and random.random() < config.PREY_EAT_PROB:
-            requested = random.randint(
-                int(config.PREY_MIN_EAT),
-                max(int(config.PREY_MIN_EAT), int(config.R_ENERGY * config.PREY_MAX_EAT_FACTOR))
-            )
+            requested = random.randint( int(config.PREY_MIN_EAT), int(config.R_ENERGY))
             events_to_env.put(("eat_grass", pid, requested))
 
         # Reproduction: every tick if enough energy (probabilistic)
         if my_energy > config.R_ENERGY and random.random() < config.PREY_REPRO_PROB:
             events_to_env.put(("spawn_prey", 1))
-            my_energy -= float(getattr(config, "PREY_REPRO_COST", 15))
+            my_energy -= config.PREY_REPRO_COST
 
         energies_to_env.put(("prey", pid, float(my_energy), bool(active)))
 
