@@ -57,7 +57,7 @@ def run_predator(shared_env, energies_to_env, events_to_env, ctrl_q):
         # Reproduction: every tick if enough energy (probabilistic)
         if my_energy > config.R_ENERGY and random.random() < config.PRED_REPRO_PROB:
             events_to_env.put(("spawn_predator", 1))
-            my_energy -= float(getattr(config, "PRED_REPRO_COST", 20))
+            my_energy -= float(config.PRED_REPRO_COST)
 
         energies_to_env.put(("predator", pid, float(my_energy), bool(active)))
 
