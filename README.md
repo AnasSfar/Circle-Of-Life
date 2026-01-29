@@ -27,7 +27,6 @@ Chaque individu est simulé par un **processus indépendant**. Les interactions 
 
 Le passage actif ↔ passif dépend du seuil d’énergie H = 30.
 
----
 ## ☠️ Mort
 
 * Si l’énergie devient négative :
@@ -36,7 +35,6 @@ Le passage actif ↔ passif dépend du seuil d’énergie H = 30.
   * l’environnement est notifié,
   * les compteurs partagés sont mis à jour proprement.
 
----
 
 ## 🌱 Herbe et sécheresse
 
@@ -47,11 +45,10 @@ Le passage actif ↔ passif dépend du seuil d’énergie H = 30.
   * l’événement est déclenché par **signal**
   * géré exclusivement par `env`
 
----
 
-## 🍽️ Configurations probabilistes
+## Configurations probabilistes
 
-### Nourriture : 
+### 🍽️ Nourriture probabiliste : 
 
 Les interactions dans notre projet sont **probabilistes** :
 
@@ -70,7 +67,6 @@ Les probabilités sont :
 * **configurables** (via `config.py`)
 * **mesurées et affichées** (moyennes globales dans les snapshots envoyés au display)
 
----
 
 ### 🧬 Reproduction probabiliste
 
