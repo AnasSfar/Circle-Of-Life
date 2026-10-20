@@ -1,4 +1,4 @@
-<sub>[🇬🇧 English](README.md) · 🇫🇷 Français</sub>
+<sub>[English](README.md) · Français</sub>
 
 # The Circle of Life 🦊🐑🌱
 
