@@ -1,3 +1,5 @@
+<sub>🇬🇧 English · [🇫🇷 Français](README.fr.md)</sub>
+
 # The Circle of Life 🦊🐑🌱
 
 **A multi-process ecosystem simulation in Python: every animal is its own OS process.**
