@@ -1,183 +1,110 @@
-# PPC Project – The Circle of Life 🦊🌱🐑
+# The Circle of Life 🦊🐑🌱
 
-## 📌 Présentation générale
+**A multi-process ecosystem simulation in Python: every animal is its own OS process.**
+Predators, prey and grass interact through shared memory, sockets, message queues and signals, and a live web dashboard lets you watch and steer the ecosystem in real time.
 
-**The Circle of Life** est un projet de programmation concurrente (PPC) visant à implémenter une **simulation multiprocessus d’un écosystème** en Python.
+![Live dashboard during a drought](docs/live-dashboard.png)
 
-L’écosystème est composé de :
+<sub>Live dashboard during a drought: grass has collapsed and prey are starving.</sub>
 
-* **Prédateurs** (carnivores),
-* **Proies** (herbivores),
-* **Herbe** (ressource environnementale).
+Built for the **Parallel and Concurrent Programming (PPC)** course at INSA Lyon by **Anas Sfar** and **Farah Gattoufi**.
 
-Chaque individu est simulé par un **processus indépendant**. Les interactions sont gérées via des mécanismes complets d’**IPC** (mémoire partagée, sockets, files de messages, signaux). Une **interface web** permet l’observation et le contrôle en temps réel.
+## Highlights
 
----
+- **One process per individual**: each prey and each predator is a separate `multiprocessing.Process`, spawned and terminated dynamically (births, deaths, user actions)
+- **Four IPC mechanisms**, each used where it fits: shared memory, TCP sockets, message queues and POSIX signals
+- **Race-free shared state**: global counters live in shared memory, protected by a lock, written only by the environment process
+- **Probabilistic model**: feeding, hunting and reproduction succeed with configurable probabilities, so population dynamics emerge instead of being scripted
+- **Live web UI** with zero dependencies: a small HTTP server streams snapshots and accepts commands
+- **Standard library only**: no package to install
 
-# 🧠 Modèle de simulation
+## Architecture
 
-## Énergie et états
+```mermaid
+flowchart LR
+    subgraph Individuals
+        P1[prey #1]
+        P2[prey #n]
+        D1[predator #1]
+        D2[predator #n]
+    end
+    E[env<br/>global state, climate, stats]
+    SHM[(shared memory<br/>counters + lock)]
+    W[display<br/>web dashboard :8001]
 
-* Chaque individu possède une **énergie** initiale qui varie (de manière probabiliste) entre 30 et 60.
-* L’énergie diminue à chaque tick de manière constante (l'énergie des proies diminue deux fois plus rapidement que celle des prédateurs)
-* Deux états possibles :
+    P1 & P2 & D1 & D2 <-->|TCP sockets<br/>handshake + actions| E
+    P1 & P2 & D1 & D2 -.->|read| SHM
+    E -->|write| SHM
+    W <-->|message queues<br/>commands / snapshots / logs| E
+    S((SIGUSR1)) -->|drought| E
+```
 
-  * **Actif** : l’individu peut tenter de se nourrir
-  * **Passif** : l’individu n’interagit pas
+| Process | Role |
+|---|---|
+| `env` | Owns the global state: populations, grass, climate, statistics |
+| `prey` | One prey (1 process = 1 individual) |
+| `predator` | One predator |
+| `display` | Web dashboard and user controls |
 
-Le passage actif ↔ passif dépend du seuil d’énergie H = 30.
+### How the processes talk
 
-## ☠️ Mort
+| Mechanism | Used for |
+|---|---|
+| **Shared memory** (`multiprocessing.Value` + `Lock`) | Global counters (predators, prey, grass). Individuals read, only `env` writes |
+| **Sockets** (TCP) | Each prey and predator connects to `env`: start-up handshake, then its probabilistic actions (success / failure) |
+| **Message queues** | `display → env` user commands; `env → display` periodic snapshots (energy stats, average feeding and reproduction probabilities) and logs |
+| **Signals** | Droughts are raised with `SIGUSR1` and handled only by `env` |
 
-* Si l’énergie devient négative :
+## Simulation model
 
-  * le processus meurt,
-  * l’environnement est notifié,
-  * les compteurs partagés sont mis à jour proprement.
+### Energy and states
 
+- Each individual starts with a random energy between 30 and 60.
+- Energy decreases at every tick (1 s); prey lose energy twice as fast as predators.
+- Below the threshold `H = 30` an individual becomes **active** and tries to feed; once fed it goes back to **passive** (above `H` for prey, above `1.5 × H` for predators, a small hysteresis that keeps hunters going a bit longer).
+- When energy drops below zero, the process dies, `env` is notified and the shared counters are updated.
 
-## 🌱 Herbe et sécheresse
+### Probabilistic feeding
 
-* L’herbe repousse automatiquement à chaque tick
-* Lors d’une **sécheresse** :
+- An active prey eats grass with an **80%** probability.
+- An active predator catches a prey with a **60%** probability, and can only catch **active** prey.
 
-  * l’événement est déclenché par **signal**
-  * géré exclusivement par `env`
-  * le nombre d'herbe est divisé par 2
-  * la croissance de l'herbe ralentit (10 herbes par tick)
+This avoids rigid, deterministic dynamics and lets behaviours emerge. Probabilities are configurable in `config.py`, and their measured averages are shown on the dashboard.
 
+### Probabilistic reproduction
 
-## Configurations probabilistes
+An individual can reproduce when it is alive and its energy is above `R = 60`, and even then only with a **50%** probability. This keeps populations from exploding and makes the simulation more stable over time.
 
-### 🍽️ Nourriture probabiliste : 
+### Grass and droughts
 
-Les interactions dans notre projet sont **probabilistes** :
+- Grass grows back at every tick.
+- A drought (triggered by signal) halves the grass and slows its growth to 10 units per tick.
 
-* Une **proie active** ne mange pas systématiquement de l’herbe (Une probabilité de 80%)
-* Un **prédateur actif** ne réussit pas systématiquement à manger une proie (Une probabilité de 60%). Les prédateurs actifs ne peuvent manger que des proies actives.
-* Chaque tentative est soumise à une **probabilité de succès** différente du tick précédent. 
+## Run it
 
-Ces probabilités permettent :
-
-* d’éviter des dynamiques trop rigides,
-* d’introduire de l’aléatoire réaliste,
-* de favoriser des comportements émergents.
-
-Les probabilités sont :
-
-* **configurables** (via `config.py`)
-* **mesurées et affichées** (moyennes globales dans les snapshots envoyés au display)
-
-
-### 🧬 Reproduction probabiliste
-
-La reproduction est également **non déterministe** :
-
-* Un individu doit :
-
-  * être vivant,
-  * avoir une énergie supérieure à un seuil `R`
-* Même si ces conditions sont réunies, la reproduction :
-
-  * **n’est pas garantie**
-  * dépend d’une **probabilité de reproduction** (50%)
-
-Ce choix permet :
-
-* de limiter les explosions démographiques,
-* d’introduire une variabilité naturelle,
-* de rendre la simulation plus stable à long terme.
-
----
-
-## 🏗️ Architecture multiprocessus
-
-| Processus  | Rôle                                              |
-| ---------- | ------------------------------------------------- |
-| `env`      | État global, populations, climat, statistiques    |
-| `prey`     | Simulation d’une proie (1 processus = 1 individu) |
-| `predator` | Simulation d’un prédateur                         |
-| `display`  | Interface web et contrôle utilisateur             |
-
----
-
-## 🔄 Communications inter-processus (IPC)
-
-### Mémoire partagée
-
-* Compteurs globaux (prédateurs, proies, herbe)
-* Accès protégé par **Locks**
-* Lecture par individus, écriture centralisée
-
-### Sockets
-
-* Connexion des processus `prey` et `predator` à `env`
-* Handshake de démarrage
-* Transmission des actions probabilistes (succès/échec)
-
-### File de messages
-
-* Communication `display → env`
-* Envoi de commandes utilisateur
-* Envoi périodique de **snapshots**, incluant :
-
-  * statistiques d’énergie,
-  * probabilités moyennes de nourriture,
-  * probabilités moyennes de reproduction.
-
-### Signaux
-
-* Gestion des sécheresses
-* Réception uniquement par le processus `env`
-
----
-
-## 🖥️ Interface Web
-
-* Visualisation temps réel :
-
-  * populations,
-  * herbe,
-  * état climatique,
-  * statistiques probabilistes
-* Contrôle dynamique de la simulation
-* Observation des effets des probabilités sur le long terme
-
----
-
-## ▶️ Exécution
+Requires Python 3.12+ on Linux or macOS (the simulation relies on POSIX signals).
 
 ```bash
 python3 main.py
 ```
 
-Interface web :
+Then open **http://127.0.0.1:8001**, add some prey and predators, and trigger a drought to see how the ecosystem reacts.
 
-```
-https://anassfar.github.io/Circle-Of-Life/
-```
+All parameters (thresholds, energy costs and gains, probabilities, population caps, ports) are in [`config.py`](config.py).
 
----
+## Concepts illustrated
 
-## 🧪 Concepts PPC illustrés
+- Python multiprocessing and dynamic process management
+- Synchronisation and critical sections
+- Inter-process communication with four different mechanisms
+- Probabilistic modelling and emergent behaviour
+- Clean shutdown and consistency of the global state
 
-* Multiprocessing Python
-* Synchronisation (sections critiques)
-* IPC complexe et réaliste
-* Modélisation probabiliste
-* Robustesse et cohérence globale
+## Authors
 
----
+- **Anas Sfar**
+- **Farah Gattoufi**
 
-## 👥 Auteurs
+## License
 
-Projet réalisé dans le cadre du cours **Programmation Parallèle et Concurrente (PPC)**.
-
-* Anas Sfar
-* Farah Gattoufi
-
----
-
-## 📄 Licence
-
-Projet académique – usage pédagogique uniquement.
+[MIT](LICENSE)
